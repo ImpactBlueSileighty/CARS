@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>ЦАРС</title>
+  <link rel="stylesheet" href="style/main.css" />
+</head>
+<body>
+
+  <aside class="sidebar">
+  <div class="sidebar-header">
+    <h2>ЦАРС</h2>
+  </div>
+  <nav class="sidebar-nav">
+    <ul>
+      <li><a href="/">Список бортов</a></li>
+      <li><a href="/bpla.html">Прошивки и Дампы</a></li>
+      <li><a href="#"></a></li>
+    </ul>
+  </nav>
+</aside>
+
+<main class="content">
+  <h1>Список бортов</h1>
+  <div id="statisticsContainer" class="statistics-container">
+  </div>
+  <button id="openModalBtn">➕ Добавить борт</button>
+  <div id="bplaTabs" class="tabs-container">
+  </div>
+  <details class="filter-box">
+    <summary>🔍 Фильтр и поиск</summary>
+    <form id="filterForm" class="filter-form">
+      <div class="filter-controls">
+        <label><input type="text" id="numberFilter" placeholder="Номер борта" /></label>
+        <label>
+          ПК:
+          <select id="controllerFilter"></select>
+        </label>
+        <label><input type="checkbox" id="tractionFilter" /> Тяги</label>
+        <label><input type="checkbox" id="angleFilter" /> Углы</label>
+        <label><input type="checkbox" id="accelerationFilter" /> Газ</label>
+        <label><input type="checkbox" id="osdFilter" /> OSD</label>
+        <label><input type="checkbox" id="osdConfiguredFilter" /> Прошивка OSD</label>
+        <label><input type="checkbox" id="plugsFilter" /> Свечи</label>
+
+        <div class="date-range">
+          <label>С: <input type="date" id="dateFrom" /></label>
+          <label>По: <input type="date" id="dateTo" /></label>
+        </div>
+      </div>
+
+      <div class="filter-actions">
+        <button type="button" id="resetFilterBtn">Сбросить</button>
+        <button type="button" id="exportBtn">📄 Экспорт в Excel</button>
+        <button type="submit">Применить</button>
+      </div>
+    </form>
+  </details>
+
+
+  <!-- Таблица -->
+  <table>
+    <thead>
+      <tr>
+        <th>Фото</th>
+        <th>Номер</th>
+        <th>ПК</th>
+        <th>Тяги</th>
+        <th>Углы</th>
+        <th>Газ</th>
+        <th>OSD</th>
+        <th>Прошивка OSD</th>
+        <th>Свечи</th>
+        <th>Описание</th>
+        <th>Дата</th>
+        <th>Изменить</th>
+        <th>Удалить</th>
+      </tr>
+    </thead>
+    <tbody id="boardTable"></tbody>
+  </table>
+
+
+  
+  <!-- Модалка -->
+  <div id="addModal">
+    <div class="modal-content">
+      <h3>Добавить борт</h3>
+      <form id="boardForm">
+        <label>Тип борта:
+          <select id="bplaId" required></select>
+        </label>
+        <input type="text" id="number" placeholder="Номер борта" required />
+        <label>ПК:
+          <select id="controllerId"></select>
+        </label>
+        <label><input type="checkbox" id="traction" /> Тяги</label>
+        <label><input type="checkbox" id="angle" /> Углы</label>
+        <label><input type="checkbox" id="acceleration" /> Газ</label>
+        <label><input type="checkbox" id="osd" /> OSD</label>
+        <label><input type="checkbox" id="osd_configured" /> Прошивка OSD</label>
+        <label><input type="checkbox" id="plugs" /> Свечи</label>
+        <input type="text" id="description" placeholder="Описание (необязательно)" />
+        <input type="file" id="photo" accept="images/*" />
+        <div class="actions">
+          <button type="submit">Сохранить</button>
+          <button type="button" id="closeModalBtn">Отмена</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Zoom окно -->
+  <div id="zoomContainer" class="zoom-img" style="display: none;" onclick="this.style.display='none'">
+    <img id="zoomedImg" src="" alt="Увеличено" />
+  </div>
+</main>
+  <script>
+    let currentBplaId = null; // null будет означать "Все типы"
+    let editBoardId = null;
+    const form = document.getElementById('boardForm');
+    const tableBody = document.getElementById('boardTable');
+    const addModal = document.getElementById('addModal');
+    const openModalBtn = document.getElementById('openModalBtn');
+    const closeModalBtn = document.getElementById('closeModalBtn');
+
+    openModalBtn.onclick = () => {
+      form.reset();
+      editBoardId = null;
+      // Если выбрана вкладка (не "Все"), устанавливаем этот тип по умолчанию
+      if (currentBplaId) {
+        document.getElementById('bplaId').value = currentBplaId;
+      }
+      addModal.style.display = 'flex';
+    };
+    closeModalBtn.onclick = () => addModal.style.display = 'none';
+    window.onclick = e => { if (e.target === addModal) addModal.style.display = 'none'; }
+
+    // async function loadFilteredBoards() {
+    //   const res = await fetch('/api/boards');
+    //   const boards = await res.json();
+    //   tableBody.innerHTML = '';
+
+    //   boards.forEach(board => {
+    //     const tr = document.createElement('tr');
+
+    //     const formattedDate = new Date(board.sold_date).toLocaleDateString('ru-RU');
+
+    //     const img = document.createElement('img');
+    //     img.src = 'images/' + board.photo_path;
+    //     img.onclick = () => {
+    //       document.getElementById('zoomedImg').src = img.src;
+    //       document.getElementById('zoomContainer').style.display = 'flex';
+    //     };
+
+    //     tr.innerHTML = `
+    //       <td></td>
+    //       <td>${board.number}</td>
+    //       <td>${board.traction ? '✅' : '❌'}</td>
+    //       <td>${board.angle ? '✅' : '❌'}</td>
+    //       <td>${board.acceleration ? '✅' : '❌'}</td>
+    //       <td>${board.osd ? '✅' : '❌'}</td>
+    //       <td>${board.osd_configured ? '✅' : '❌'}</td>
+    //       <td>${board.plugs ? '✅' : '❌'}</td>
+    //       <td>${board.description || ''}</td>
+    //       <td>${formattedDate}</td>
+    //       <td><button onclick="editBoard(${board.id})">✏️</button></td>
+    //       <td><button onclick="deleteBoard(${board.id})">🗑</button></td>
+    //     `;
+    //     tr.children[0].appendChild(img);
+    //     tableBody.appendChild(tr);
+    //   });
+    // }
+
+    async function editBoard(id) {
+      const res = await fetch('/api/board/' + id);
+      const board = await res.json();
+
+      document.getElementById('number').value = board.number;
+      document.getElementById('traction').checked = board.traction;
+      document.getElementById('angle').checked = board.angle;
+      document.getElementById('acceleration').checked = board.acceleration;
+      document.getElementById('osd').checked = board.osd;
+      document.getElementById('osd_configured').checked = board.osd_configured;
+      document.getElementById('plugs').checked = board.plugs;
+      document.getElementById('description').value = board.description || '';
+
+      editBoardId = id;
+      addModal.style.display = 'flex';
+    }
+
+
+    async function deleteBoard(id) {
+      if (!confirm('Вы уверены, что хотите удалить борт?')) return;
+      await fetch('/api/board/' + id, { method: 'DELETE' });
+      loadFilteredBoards();
+      loadAndDisplayStatistics();
+    }
+
+    
+    //submit
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const body = {
+        bpla_id: document.getElementById('bplaId').value,
+        number: document.getElementById('number').value,
+        traction: document.getElementById('traction').checked,
+        angle: document.getElementById('angle').checked,
+        acceleration: document.getElementById('acceleration').checked,
+        osd: document.getElementById('osd').checked,
+        osd_configured: document.getElementById('osd_configured').checked,
+        plugs: document.getElementById('plugs').checked,
+        description: document.getElementById('description').value,
+        controller_id: document.getElementById('controllerId').value || null
+      };
+
+      const photoFile = document.getElementById('photo').files[0];
+
+      if (editBoardId) {
+        // Редактирование
+        await fetch(`/api/board/${editBoardId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+
+        if (photoFile) {
+          const timestamp = new Date().toISOString().replace(/[-T:.Z]/g, '');
+          const randomSuffix = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+          const photo_path = `photo_${timestamp}_${randomSuffix}.jpg`;
+
+          const formData = new FormData();
+
+          formData.append('photo', new File([photoFile], photo_path));
+
+          await fetch('/api/upload_photo', { method: 'POST', body: formData });
+
+          // обновить путь фото
+          await fetch(`/api/board/${editBoardId}/photo`, {
+            method: 'PUT',
+            body: formData // 👈 убрали headers, не нужен Content-Type — его ставит сам браузер
+          });
+        }
+
+      } else {
+        // Добавление
+        const timestamp = new Date().toISOString().replace(/[-T:.Z]/g, '');
+        const randomSuffix = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+        const photo_path = `photo_${timestamp}_${randomSuffix}.jpg`;
+
+        body.photo_path = photo_path;
+
+        const res = await fetch('/api/add_board', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+
+        if (photoFile) {
+          const formData = new FormData();
+          formData.append('photo', new File([photoFile], photo_path));
+          await fetch('/api/upload_photo', {
+            method: 'POST',
+            body: formData
+          });
+        }
+      }
+
+      form.reset();
+      addModal.style.display = 'none';
+      editBoardId = null;
+      loadFilteredBoards();
+      loadAndDisplayStatistics();
+    });
+
+    loadFilteredBoards();
+
+
+    // Отправляет фильтры и перезагружает таблицу
+    document.getElementById('filterForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      await loadFilteredBoards();
+    });
+
+    // Очистка фильтров
+    document.getElementById('resetFilterBtn').addEventListener('click', () => {
+      document.getElementById('filterForm').reset();
+      loadFilteredBoards(); // обычный запрос без фильтра
+    });
+
+    // Получение значений фильтров
+    function getFilters() {
+      return {
+        number: document.getElementById('numberFilter').value.trim(),
+        controller_id: document.getElementById('controllerFilter').value || null,
+        traction: document.getElementById('tractionFilter').checked,
+        angle: document.getElementById('angleFilter').checked,
+        acceleration: document.getElementById('accelerationFilter').checked,
+        osd: document.getElementById('osdFilter').checked,
+        osd_configured: document.getElementById('osdConfiguredFilter').checked,
+        plugs: document.getElementById('plugsFilter').checked,
+        date_from: document.getElementById('dateFrom').value,
+        date_to: document.getElementById('dateTo').value,
+      };
+    }
+
+    // Новая функция для загрузки и отображения статистики
+    async function loadAndDisplayStatistics() {
+      const container = document.getElementById('statisticsContainer');
+      if (!container) return;
+
+      try {
+        const res = await fetch('/api/statistics');
+        if (!res.ok) throw new Error('Ошибка сети');
+        
+        const stats = await res.json();
+        
+        if (stats.length === 0) {
+          container.innerHTML = '<p>Нет данных для статистики.</p>';
+          return;
+        }
+
+        let html = '';
+        stats.forEach(typeStat => {
+          html += `
+            <div class="stat-item">
+              <div class="stat-title">Всего "${typeStat.name}": ${typeStat.total_count}</div>
+              <div class="stat-values">
+                <span class="finished">✅ Готовые: ${typeStat.finished_count}</span>
+                <span class="semi-finished">🛠️ В работе: ${typeStat.semi_finished_count}</span>
+              </div>
+            </div>
+          `;
+        });
+        container.innerHTML = html;
+        
+      } catch (error) {
+        console.error("Не удалось загрузить статистику:", error);
+        container.innerHTML = '<p>Не удалось загрузить статистику.</p>';
+      }
+    }
+
+    // Загрузка отфильтрованных данных
+    async function loadFilteredBoards() {
+
+      const filters = getFilters(); // Получаем фильтры из формы
+      filters.bpla_id = currentBplaId;
+      const res = await fetch('/api/boards/filter', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(filters)
+      });
+
+      if (!res.ok) {
+        console.error('Ошибка загрузки данных:', res.statusText);
+        tableBody.innerHTML = `
+          <tr><td colspan="12" style="text-align:center;">Ошибка загрузки данных</td></tr>
+        `;
+        return;
+      }
+
+      const boards = await res.json();
+
+      tableBody.innerHTML = '';
+      if (!boards.length) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td colspan="12" style="text-align:center;">Нет данных</td>`;
+        tableBody.appendChild(tr);
+        return;
+      }
+
+      boards.forEach(board => {
+        const tr = document.createElement('tr');
+        const formattedDate = new Date(board.sold_date).toLocaleDateString('ru-RU');
+        const img = document.createElement('img');
+        img.src = 'images/' + board.photo_path;
+        img.onclick = () => {
+          document.getElementById('zoomedImg').src = img.src;
+          document.getElementById('zoomContainer').style.display = 'flex';
+        };
+        tr.innerHTML = `
+          <td></td>
+          <td>${board.number}</td>
+          <td>${board.controller_name}</td>
+          <td>${board.traction ? '✅' : '❌'}</td>
+          <td>${board.angle ? '✅' : '❌'}</td>
+          <td>${board.acceleration ? '✅' : '❌'}</td>
+          <td>${board.osd ? '✅' : '❌'}</td>
+          <td>${board.osd_configured ? '✅' : '❌'}</td>
+          <td>${board.plugs ? '✅' : '❌'}</td>
+          <td>${board.description || ''}</td>
+          <td>${formattedDate}</td>
+          <td><button onclick="editBoard(${board.id})">✏️</button></td>
+          <td><button onclick="deleteBoard(${board.id})">🗑</button></td>
+        `;
+        tr.children[0].appendChild(img);
+        tableBody.appendChild(tr);
+      });
+    }
+
+    async function loadControllers() {
+      const res = await fetch('/api/controllers');
+      const controllers = await res.json();
+      const select = document.getElementById('controllerId');
+      select.innerHTML = '<option value="">Не выбран</option>';
+      controllers.forEach(ctrl => {
+        const option = document.createElement('option');
+        option.value = ctrl.id;
+        option.textContent = `${ctrl.name} (${ctrl.dump})`;
+        select.appendChild(option);
+      });
+    }
+
+    async function loadControllerFilters() {
+      const res = await fetch('/api/controllers');
+      const controllers = await res.json();
+      const select = document.getElementById('controllerFilter');
+      select.innerHTML = '<option value="">Любой</option>';
+      controllers.forEach(ctrl => {
+        const option = document.createElement('option');
+        option.value = ctrl.id;
+        option.textContent = `${ctrl.name} (${ctrl.dump})`;
+        select.appendChild(option);
+      });
+    }
+
+    async function loadAndRenderBplaTabs() {
+      const tabsContainer = document.getElementById('bplaTabs');
+      const res = await fetch('/api/bpla');
+      const bplaTypes = await res.json();
+
+      // Создаем вкладку "Все"
+      const allTab = document.createElement('button');
+      allTab.className = 'tab-btn active'; // "Все" активно по умолчанию
+      allTab.textContent = 'Все';
+      allTab.onclick = () => {
+        currentBplaId = null;
+        setActiveTab(allTab);
+        loadFilteredBoards(); // Загружаем все борты
+      };
+      tabsContainer.appendChild(allTab);
+
+      // Создаем вкладки для каждого типа
+      bplaTypes.forEach(type => {
+        const tab = document.createElement('button');
+        tab.className = 'tab-btn';
+        tab.textContent = type.name;
+        tab.dataset.bplaId = type.id; // Сохраняем ID в data-атрибуте
+        tab.onclick = () => {
+          currentBplaId = type.id;
+          setActiveTab(tab);
+          loadFilteredBoards(); // Загружаем борты для этого типа
+        };
+        tabsContainer.appendChild(tab);
+      });
+    }
+
+    function setActiveTab(activeButton) {
+      // Убираем класс 'active' у всех вкладок
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      // Добавляем класс 'active' нажатой кнопке
+      activeButton.classList.add('active');
+    }
+
+    async function loadBplaTypesForModal() {
+      const select = document.getElementById('bplaId');
+      select.innerHTML = ''; // Очищаем
+      
+      const res = await fetch('/api/bpla');
+      const bplaTypes = await res.json();
+      
+      bplaTypes.forEach(type => {
+        const option = document.createElement('option');
+        option.value = type.id;
+        option.textContent = type.name;
+        select.appendChild(option);
+      });
+    }
+
+
+    // Новая функция для экспорта данных в Excel
+    async function exportToExcel() {
+      const exportButton = document.getElementById('exportBtn');
+      const originalText = exportButton.innerHTML;
+      
+      // Собираем все текущие фильтры со страницы
+      const filters = getFilters();
+      filters.bpla_id = currentBplaId;
+
+      // Показываем пользователю, что идет процесс
+      exportButton.disabled = true;
+      exportButton.innerHTML = 'Загрузка...';
+
+      try {
+        const res = await fetch('/api/boards/export', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(filters)
+        });
+
+        if (!res.ok) {
+          throw new Error('Ошибка сети при формировании файла');
+        }
+
+        // Получаем файл как Blob (бинарные данные)
+        const blob = await res.blob();
+        
+        // Создаем временную ссылку для скачивания файла
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        // Имя файла будет задано сервером, но можно указать и здесь
+        a.download = `bpla_export_${new Date().toLocaleDateString('sv-SE')}.xlsx`;
+        document.body.appendChild(a);
+        
+        a.click(); // Имитируем клик для начала скачивания
+        
+        // Очищаем за собой
+        window.URL.revokeObjectURL(url);
+        a.remove();
+
+      } catch (error) {
+        console.error('Ошибка при экспорте:', error);
+        alert('Не удалось экспортировать данные.');
+      } finally {
+        // Возвращаем кнопку в исходное состояние
+        exportButton.disabled = false;
+        exportButton.innerHTML = originalText;
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", async () => {
+      await loadAndDisplayStatistics();
+      await loadBplaTypesForModal(); // Загружаем типы для модалки
+      await loadAndRenderBplaTabs();   // Создаем вкладки
+      await loadControllers();         // Для формы добавления/редактирования
+      await loadControllerFilters(); 
+       document.getElementById('exportBtn').addEventListener('click', exportToExcel); 
+      loadFilteredBoards();            // Загружаем начальные данные (вкладка "Все")
+    });
+
+  </script>
+</body>
+</html>

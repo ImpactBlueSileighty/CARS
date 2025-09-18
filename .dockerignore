@@ -1,0 +1,10 @@
+# Exclude development files and folders
+.git
+.env
+node_modules
+npm-debug.log
+
+# Exclude Docker files
+Dockerfile
+.dockerignore
+docker-compose.yml

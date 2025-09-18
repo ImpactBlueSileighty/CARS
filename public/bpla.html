@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Прошивки и дампы</title>
+  <style>
+    :root {
+      --bg: #f5f6f7;
+      --primary: #2c3e50;
+      --accent: #1abc9c;
+      --text: #333;
+      --white: #fff;
+      --shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+      --radius: 8px;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 2rem;
+    }
+    h1 {
+      text-align: center;
+      color: var(--primary);
+    }
+
+    /* === Боковая панель (сайдбар) === */
+    .sidebar {
+      position: fixed;
+      left: 0;
+      top: 0;
+      width: 220px;
+      height: 100vh;
+      background-color: var(--white);
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      padding: 1rem 1.5rem;
+      z-index: 999;
+    }
+    .sidebar-header h2 {
+      font-size: 1.2rem;
+      color: var(--primary);
+      font-weight: bold;
+      margin: 0;
+    }
+    .sidebar-nav ul {
+      list-style: none;
+      padding: 0;
+      margin-top: 1.5rem;
+    }
+    .sidebar-nav li {
+      margin-bottom: 1rem;
+    }
+    .sidebar-nav a {
+      text-decoration: none;
+      color: var(--text);
+      font-weight: 500;
+      transition: color 0.2s ease;
+    }
+    .sidebar-nav a:hover,
+    .sidebar-nav a.active {
+      color: var(--accent);
+    }
+
+    /* === Основной контент — чтобы не перекрывался сайдбаром === */
+    .content {
+      margin-left: 240px; /* Ширина сайдбара + отступ */
+    }
+
+    button {
+      padding: 10px 20px;
+      background-color: var(--accent);
+      border: none;
+      border-radius: var(--radius);
+      color: var(--white);
+      font-weight: bold;
+      cursor: pointer;
+      box-shadow: var(--shadow);
+      transition: background 0.2s ease;
+    }
+    button:hover {
+      background-color: #17a689;
+    }
+
+    .form-group {
+      max-width: 500px;
+      margin: 2rem auto;
+      background: var(--white);
+      padding: 20px;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+    .form-group label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: 500;
+    }
+    .form-group select {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 15px;
+      border: 1px solid #ccc;
+      border-radius: var(--radius);
+    }
+
+    .result {
+      max-width: 800px;
+      margin: 2rem auto;
+      background: var(--white);
+      padding: 20px;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+    .result h3 {
+      margin-top: 0;
+      color: var(--primary);
+    }
+    .file-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px;
+      background: #f9f9f9;
+      border: 1px solid #eee;
+      border-radius: 6px;
+      margin-bottom: 10px;
+    }
+    .file-item a {
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: bold;
+    }
+    .file-item a:hover {
+      text-decoration: underline;
+    }
+
+    details {
+      margin-top: 20px;
+    }
+    details summary {
+      cursor: pointer;
+      font-weight: 600;
+      color: var(--primary);
+    }
+    .version-list {
+      margin-top: 10px;
+    }
+    .version-item {
+      padding: 8px;
+      background: #f0f0f0;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      margin-bottom: 5px;
+      font-size: 0.95rem;
+    }
+    .version-item a {
+      color: var(--accent);
+      margin-left: 10px;
+    }
+  </style>
+</head>
+<body>
+    <aside class="sidebar">
+    <div class="sidebar-header"><h2>ЦАРС</h2></div>
+    <nav class="sidebar-nav">
+        <ul>
+        <li><a href="/">Список бортов</a></li>
+        <li><a href="/bpla.html" class="active">Прошивки и Дампы</a></li>
+        </ul>
+    </nav>
+    </aside>
+  <h1>Прошивки и дампы</h1>
+  <div id="upload-section" style="display: none;">
+    <h3>Загрузить новые файлы</h3>
+    <form id="uploadForm">
+      <input type="file" name="firmware" required>
+      <input type="file" name="dump" required>
+      <button type="submit">Загрузить</button>
+    </form>
+  </div>
+  <div class="form-group">
+    <label>БПЛА:</label>
+    <select id="bplaName">
+      <option value="">Загрузка...</option>
+    </select>
+
+    <label>Тип контроллера:</label>
+    <select id="controllerType">
+      <option value="">Сначала выберите БПЛА</option>
+    </select>
+  </div>
+
+  <div id="result" class="result" style="display: none;">
+    <h3>Актуальные файлы</h3>
+    <div id="currentFiles"></div>
+
+    <details id="versionsDetails">
+      <summary>Предыдущие версии</summary>
+      <div id="previousVersions" class="version-list"></div>
+    </details>
+  </div>
+
+  <script src="bpla.js"></script>
+</body>
+</html>

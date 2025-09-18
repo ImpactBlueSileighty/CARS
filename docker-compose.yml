@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  # Your Node.js Application Service
+  app:
+    build: .
+    container_name: cars_app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      # Mount these folders to persist user-uploaded files
+      - ./images:/app/images
+      - ./firmwares:/app/firmwares
+      - ./dumps:/app/dumps
+    environment:
+      # Pass database connection details to your app
+      - DATABASE_URL=postgres://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      - NODE_ENV=production
+    depends_on:
+      - db # Ensures the database starts before the app
+
+  # PostgreSQL Database Service
+  db:
+    image: postgres:15-alpine
+    container_name: cars_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data # Persists database data
+
+volumes:
+  postgres_data:
