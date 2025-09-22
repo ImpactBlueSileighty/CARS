@@ -3,11 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <title>Вход в систему</title>
+  <link rel="stylesheet" href="/style/main.css">
   <style>
-    body { display: flex; justify-content: center; align-items: center; height: 100vh; }
-    .login-form { width: 350px; padding: 2rem; background: #fff; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-    input { width: 100%; padding: 10px; margin-bottom: 1rem; border: 1px solid #ccc; border-radius: 4px; }
-    button { width: 100%; padding: 10px; /* ... */ }
+    body { display: flex; justify-content: center; align-items: center; height: 100vh; background-color: var(--bg); }
+    .login-form { width: 350px; padding: 2rem; background: var(--white); border-radius: var(--radius); box-shadow: var(--shadow); }
+    .login-form h2 { text-align: center; color: var(--primary); margin-bottom: 1.5rem; }
+    .login-form input { width: 100%; padding: 10px; margin-bottom: 1rem; border: 1px solid #ccc; border-radius: 4px; }
+    .remember-me { display: flex; align-items: center; margin-bottom: 1rem; font-size: 0.9rem; }
+    .remember-me input { width: auto; margin: 0 8px 0 0; }
+    #error-message { color: #e74c3c; text-align: center; height: 1rem; margin-top: 1rem;}
   </style>
 </head>
 <body>
@@ -16,10 +20,14 @@
     <form id="loginForm">
       <input type="text" id="login" placeholder="Логин" required>
       <input type="password" id="password" placeholder="Пароль" required>
+      <div class="remember-me">
+        <input type="checkbox" id="rememberMe" checked>
+        <label for="rememberMe">Запомнить меня</label>
+      </div>
       <button type="submit">Войти</button>
-      <p id="error-message" style="color: red; text-align: center;"></p>
+      <p id="error-message"></p>
     </form>
   </div>
-  <script src="login.js"></script>
+  <script src="/login.js"></script>
 </body>
 </html>
