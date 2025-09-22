@@ -9,20 +9,18 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      # Mount these folders to persist user-uploaded files
       - ./images:/app/images
       - ./firmwares:/app/firmwares
       - ./dumps:/app/dumps
     environment:
-      # Pass database connection details to your app
       - DATABASE_URL=postgres://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
       - NODE_ENV=production
     depends_on:
-      - db # Ensures the database starts before the app
+      - db
 
   # PostgreSQL Database Service
   db:
-    image: postgres:15-alpine
+    image: postgres:16-alpine
     container_name: cars_db
     restart: unless-stopped
     environment:
@@ -30,7 +28,7 @@ services:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
-      - postgres_data:/var/lib/postgresql/data # Persists database data
+      - postgres_data:/var/lib/postgresql/data
 
 volumes:
   postgres_data:
