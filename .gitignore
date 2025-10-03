@@ -6,3 +6,8 @@
 # Logs
 npm-debug.log
 *.log
+
+
+/dumps/
+/firmwares/
+/images/
