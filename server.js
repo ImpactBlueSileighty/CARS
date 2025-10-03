@@ -188,38 +188,58 @@ app.get('/api/boards', async (req, res) => {
     SELECT b.*, c.name AS controller_name 
     FROM boards b
     LEFT JOIN controller c ON b.controller_id = c.id
-    ORDER BY sold_date DESC`);
+    ORDER BY finished_date DESC`);
   res.json(rows);
 });
 
 // Получить одну запись
-app.get('/api/board/:id', async (req, res) => {
-  const { id } = req.params;
-  const { rows } = await pool.query('SELECT * FROM boards WHERE id = $1', [id]);
-  if (rows.length === 0) return res.status(404).json({ error: 'Not found' });
-  res.json(rows[0]);
+app.put('/api/board/:id', async (req, res) => {
+    const { id } = req.params;
+    const {
+        bpla_id, number, supplier_id, controller_id, description,
+        traction_date, angle_date, acceleration_date, osd_date,
+        osd_configured_date, plugs_date, engine_start_date
+    } = req.body;
+    try {
+        await pool.query(
+            `UPDATE boards SET 
+                bpla_id = $1, number = $2, supplier_id = $3, controller_id = $4, description = $5,
+                traction_date = $6, angle_date = $7, acceleration_date = $8, osd_date = $9, 
+                osd_configured_date = $10, plugs_date = $11, engine_start_date = $12
+             WHERE id = $13`,
+            [
+                bpla_id, number, supplier_id, controller_id, description,
+                traction_date, angle_date, acceleration_date, osd_date,
+                osd_configured_date, plugs_date, engine_start_date, id
+            ]
+        );
+        logAction(req.session.user.id, 'UPDATE_BOARD', `Обновлен борт №${number}`);
+        res.sendStatus(200);
+    } catch (err) {
+        console.error('Ошибка при обновлении борта:', err);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
 });
 
 // Добавить новую запись с фото
 app.post('/api/add_board', async (req, res) => {
   try {
+    // Убираем finished_date из полей
     const {
-      bpla_id, number, controller_id, description, photo_path,
+      bpla_id, number, supplier_id, controller_id, description, photo_path,
       traction_date, angle_date, acceleration_date, osd_date, 
-      osd_configured_date, plugs_date, engine_start_date, supplier_id
+      osd_configured_date, plugs_date, engine_start_date
     } = req.body;
 
-    const sold_date = new Date().toLocaleDateString('sv-SE');
-
+    // Убираем finished_date из SQL-запроса
     const result = await pool.query(
       `INSERT INTO boards (
-        bpla_id, number, controller_id, description, photo_path, sold_date,
-        traction_date, angle_date, acceleration_date, osd_date, osd_configured_date, plugs_date, engine_start_date, supplier_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *`, 
+        bpla_id, number, supplier_id, controller_id, description, photo_path,
+        traction_date, angle_date, acceleration_date, osd_date, osd_configured_date, plugs_date, engine_start_date
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *`, 
       [
-        bpla_id, number, controller_id, description, photo_path, sold_date,
-        traction_date, angle_date, acceleration_date, osd_date, osd_configured_date, plugs_date, engine_start_date,
-        supplier_id
+        bpla_id, number, supplier_id, controller_id, description, photo_path,
+        traction_date, angle_date, acceleration_date, osd_date, osd_configured_date, plugs_date, engine_start_date
       ]
     );
 
@@ -271,18 +291,28 @@ app.put('/api/board/:id', async (req, res) => {
 // Фильтрация с POST-запросом
 app.post('/api/boards/filter', async (req, res) => {
   const { 
-    number, controller_id, date_from, date_to, bpla_id, engine_start
+      number, controller_id, date_from, date_to, bpla_id,
+      traction, angle, acceleration, osd, osd_configured, plugs, engine_start,
+      status 
   } = req.body;
 
-  let query = `
-    SELECT b.*, c.name AS controller_name, bp.name AS bpla_name, s.name AS supplier_name
-    FROM boards b
-    LEFT JOIN controller c ON b.controller_id = c.id
-    LEFT JOIN bpla bp ON b.bpla_id = bp.id
-    LEFT JOIN suppliers s ON b.supplier_id = s.id
-    WHERE TRUE`;
-  const params = [];
+  const finishedCondition = `(
+      b.traction_date IS NOT NULL AND b.angle_date IS NOT NULL AND 
+      b.acceleration_date IS NOT NULL AND b.osd_date IS NOT NULL AND 
+      b.osd_configured_date IS NOT NULL AND b.plugs_date IS NOT NULL AND 
+      b.engine_start_date IS NOT NULL
+  )`;
 
+  let query = `
+      SELECT b.*, c.name AS controller_name, bp.name AS bpla_name, s.name AS supplier_name
+      FROM boards b
+      LEFT JOIN controller c ON b.controller_id = c.id
+      LEFT JOIN bpla bp ON b.bpla_id = bp.id
+      LEFT JOIN suppliers s ON b.supplier_id = s.id
+      WHERE TRUE`;
+  const params = []
+
+  // Основные фильтры (поиск, контроллер, даты, тип БПЛА)
   if (bpla_id) {
     try {
         const children = await pool.query('SELECT id FROM bpla WHERE parent_id = $1', [bpla_id]);
@@ -294,32 +324,40 @@ app.post('/api/boards/filter', async (req, res) => {
         console.error("Ошибка при поиске дочерних БПЛА:", e);
     }
   }
-
   if (number) {
     params.push(`%${number.trim().toLowerCase()}%`);
     query += ` AND LOWER(TRIM(b.number)) ILIKE $${params.length}`;
   }
-
-  if (engine_start) {
-    query += ` AND b.engine_start_date IS NOT NULL`;
-  }
-  
   if (controller_id) {
     params.push(controller_id);
     query += ` AND b.controller_id = $${params.length}`;
   }
-
   if (date_from) {
     params.push(date_from);
-    query += ` AND b.sold_date >= $${params.length}`;
+    query += ` AND b.finished_date >= $${params.length}`;
   }
-
   if (date_to) {
     params.push(date_to);
-    query += ` AND b.sold_date <= $${params.length}`;
+    query += ` AND b.finished_date <= $${params.length}`;
   }
 
-  query += ' ORDER BY b.sold_date DESC';
+  // 3. Логика фильтрации по статусу и параметрам
+  // Фильтр по общему статусу ("Готовые" / "В работе") имеет приоритет
+  if (status === 'finished') {
+      query += ` AND ${finishedCondition}`;
+  } else if (status === 'in_progress') {
+      query += ` AND NOT ${finishedCondition}`;
+  } else {
+      if (traction) query += ` AND b.traction_date IS NOT NULL`;
+      if (angle) query += ` AND b.angle_date IS NOT NULL`;
+      if (acceleration) query += ` AND b.acceleration_date IS NOT NULL`;
+      if (osd) query += ` AND b.osd_date IS NOT NULL`;
+      if (osd_configured) query += ` AND b.osd_configured_date IS NOT NULL`;
+      if (plugs) query += ` AND b.plugs_date IS NOT NULL`;
+      if (engine_start) query += ` AND b.engine_start_date IS NOT NULL`;
+  }
+
+  query += ' ORDER BY b.finished_date DESC';
 
   try {
     const result = await pool.query(query, params);
@@ -368,41 +406,34 @@ app.get('/api/controllers', async (req, res) => {
 });
 
 app.patch('/api/board/:id/parameter', async (req, res) => {
-  const { id } = req.params;
-  const { parameter, date } = req.body;
-
-  // Белый список колонок, которые можно обновлять через этот маршрут.
-  // Это ВАЖНАЯ мера безопасности.
-  const allowedParameters = [
-    'traction_date', 'angle_date', 'acceleration_date', 'osd_date', 
-    'osd_configured_date', 'plugs_date', 'engine_start_date'
-  ];
-
-  if (!allowedParameters.includes(parameter)) {
-    return res.status(400).json({ error: 'Недопустимый параметр' });
-  }
-
-  try {
-    // Динамически и безопасно создаем SQL-запрос
-    await pool.query(
-      `UPDATE boards SET ${parameter} = $1 WHERE id = $2`,
-      [date, id]
-    );
-    // Логируем действие
-    const user = req.session.user;
-    const { rows } = await pool.query('SELECT number FROM boards WHERE id = $1', [id]);
-    const boardNumber = rows.length > 0 ? rows[0].number : 'Неизвестный';
-    const actionDetail = date 
-        ? `установил дату для '${parameter}' на борту №${boardNumber}`
-        : `снял дату для '${parameter}' на борту №${boardNumber}`;
-
-    logAction(user.id, 'UPDATE_PARAMETER', actionDetail);
-    
-    res.status(200).json({ message: 'Параметр обновлен' });
-  } catch (err) {
-    console.error('Ошибка частичного обновления:', err);
-    res.status(500).json({ error: 'Ошибка сервера' });
-  }
+    const { id } = req.params;
+    const { parameter, date } = req.body;
+    const allowedParameters = [
+        'traction_date', 'angle_date', 'acceleration_date', 'osd_date',
+        'osd_configured_date', 'plugs_date', 'engine_start_date'
+    ];
+    if (!allowedParameters.includes(parameter)) {
+        return res.status(400).json({ error: 'Недопустимый параметр' });
+    }
+    try {
+        await pool.query(`UPDATE boards SET ${parameter} = $1 WHERE id = $2`, [date, id]);
+        if (date !== null) {
+            const { rows } = await pool.query('SELECT * FROM boards WHERE id = $1', [id]);
+            const board = rows[0];
+            if (board.finished_date === null) {
+                const isFinished = allowedParameters.every(param => board[param] !== null);
+                if (isFinished) {
+                    await pool.query('UPDATE boards SET finished_date = NOW() WHERE id = $1', [id]);
+                    logAction(req.session.user.id, 'FINISH_BOARD', `Борт №${board.number} помечен как готовый`);
+                }
+            }
+        }
+        logAction(req.session.user.id, 'UPDATE_PARAMETER', `Обновлен параметр '${parameter}' для борта с ID ${id}`);
+        res.status(200).json({ message: 'Параметр обновлен' });
+    } catch (err) {
+        console.error('Ошибка частичного обновления:', err);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
 });
 
 
@@ -447,7 +478,7 @@ app.post('/api/boards', async (req, res) => {
     params.push(bpla_id);
   }
 
-  query += ' ORDER BY sold_date DESC';
+  query += ' ORDER BY finished_date DESC';
 
   try {
     const result = await pool.query(query, params);
@@ -600,7 +631,7 @@ app.post('/api/boards/export', async (req, res) => {
       b.plugs_date,
       b.engine_start_date,
       b.description,
-      b.sold_date
+      b.finished_date
     FROM boards b
     LEFT JOIN controller c ON b.controller_id = c.id
     LEFT JOIN bpla bp ON b.bpla_id = bp.id
@@ -618,7 +649,7 @@ app.post('/api/boards/export', async (req, res) => {
   // ... добавьте сюда остальные if-блоки для галочек, контроллера и дат,
   // ... точно так же, как в вашем методе /api/boards/filter
 
-  query += ' ORDER BY b.sold_date DESC';
+  query += ' ORDER BY b.finished_date DESC';
   // --- Конец: Логика фильтрации ---
 
   try {
@@ -634,7 +665,7 @@ app.post('/api/boards/export', async (req, res) => {
       { header: 'Номер борта', key: 'number', width: 15 },
       { header: 'Тип БПЛА', key: 'bpla_name', width: 15 },
       { header: 'Контроллер', key: 'controller_name', width: 20 },
-      { header: 'Дата созд.', key: 'sold_date', width: 15 },
+      { header: 'Дата созд.', key: 'finished_date', width: 15 },
       { header: 'Тяги', key: 'traction_date', width: 15 },
       { header: 'Углы', key: 'angle_date', width: 15 },
       { header: 'Газ', key: 'acceleration_date', width: 15 },
@@ -651,7 +682,7 @@ app.post('/api/boards/export', async (req, res) => {
       number: row.number,
       bpla_name: row.bpla_name,
       controller_name: row.controller_name,
-      sold_date: formatDate(row.sold_date),
+      finished_date: formatDate(row.finished_date),
       traction_date: formatDate(row.traction_date),
       angle_date: formatDate(row.angle_date),
       acceleration_date: formatDate(row.acceleration_date),
@@ -696,7 +727,48 @@ app.get('/api/suppliers', async (req, res) => {
   }
 });
 
+app.get('/summary.html', isAuthenticated, (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'summary.html'));
+});
 
+app.get('/api/statistics/summary', async (req, res) => {
+  try {
+    // 1. Получаем дату из запроса. Если ее нет, используем сегодняшнюю.
+    const date = req.query.date || new Date().toLocaleDateString('sv-SE');
+    
+    // 2. Определяем, что такое "готовый" борт.
+    // Это борт, у которого заполнены все ключевые даты.
+    const finishedCondition = `
+      traction_date IS NOT NULL AND angle_date IS NOT NULL AND 
+      acceleration_date IS NOT NULL AND osd_date IS NOT NULL AND 
+      osd_configured_date IS NOT NULL AND plugs_date IS NOT NULL AND 
+      engine_start_date IS NOT NULL
+    `;
+
+    // 3. Считаем количество готовых бортов за указанную дату
+    const dailyRes = await pool.query(
+      `SELECT COUNT(*) AS count FROM boards WHERE finished_date = $1 AND (${finishedCondition})`,
+      [date]
+    );
+    const finished_on_date = parseInt(dailyRes.rows[0].count, 10);
+
+    // 4. Считаем общее количество всех готовых бортов
+    const totalRes = await pool.query(
+      `SELECT COUNT(*) AS count FROM boards WHERE (${finishedCondition})`
+    );
+    const total_finished = parseInt(totalRes.rows[0].count, 10);
+
+    // 5. Отправляем результат в формате JSON
+    res.json({
+      finished_on_date,
+      total_finished
+    });
+
+  } catch (err) {
+    console.error('Ошибка при получении сводки:', err);
+    res.status(500).json({ error: 'Ошибка на сервере' });
+  }
+});
 
 // GET /api/logs - Получение списка логов
 app.get('/api/logs', async (req, res) => {

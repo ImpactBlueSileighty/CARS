@@ -11,19 +11,34 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const res = await fetch('/api/bpla');
       const bplas = await res.json();
+
+      // --- НОВАЯ ЛОГИКА ФИЛЬТРАЦИИ ---
+      // 1. Находим ID всех БПЛА, которые являются родителями для других.
+      const parentIds = new Set(
+        bplas
+          .map(b => b.parent_id)
+          .filter(id => id !== null) // Убираем null значения
+      );
+
+      // 2. Из общего списка убираем те, чьи ID находятся в списке родителей.
+      const filteredBplas = bplas.filter(b => !parentIds.has(b.id));
+      // ---------------------------------
+
       bplaNameSelect.innerHTML = '<option value="">Выберите БПЛА</option>';
-      bplas.forEach(b => {
+      
+      // Используем отфильтрованный список для создания опций
+      filteredBplas.forEach(b => {
         const option = document.createElement('option');
         option.value = b.id;
         option.textContent = b.name;
         bplaNameSelect.appendChild(option);
       });
+
     } catch (err) {
-      console.error(err);
+      console.error('Ошибка загрузки списка БПЛА:', err);
       bplaNameSelect.innerHTML = '<option value="">Ошибка загрузки</option>';
     }
   }
-
   // Загрузка контроллеров для выбранного БПЛА
   bplaNameSelect.addEventListener('change', async () => {
     const bplaId = bplaNameSelect.value;

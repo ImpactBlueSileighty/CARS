@@ -557,3 +557,50 @@ select:focus {
     max-height: 90%;
     border-radius: var(--radius);
 }
+
+.summary-grid {
+    display: grid;
+    /* Две колонки с автоматической шириной и отступом */
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+}
+
+.summary-widget {
+    background: var(--white);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 20px 24px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    border-left: 4px solid var(--accent); /* Цветная полоска слева */
+}
+
+.widget-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--primary);
+    padding-bottom: 12px;
+    margin-bottom: 12px;
+    border-bottom: 1px solid #eee;
+}
+
+#summaryDate {
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-family: inherit;
+    font-size: 0.9rem;
+    background-color: #f9f9f9;
+}
+
+.widget-value {
+    font-size: 3.5rem; /* Большой шрифт для цифр */
+    font-weight: 700;
+    color: var(--accent);
+    text-align: center;
+    line-height: 1.1;
+}

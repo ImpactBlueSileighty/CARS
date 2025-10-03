@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8" />
+    <title>ЦАРС - Сводка</title>
+    <link rel="stylesheet" href="style/main.css" />
+</head>
+<body>
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <h2>ЦАРС</h2>
+        </div>
+        <nav class="sidebar-nav">
+            <ul>
+                <li><a href="/">Список бортов</a></li>
+                <li><a href="/bpla.html">Прошивки и Дампы</a></li>
+                <li><a href="/summary.html" class="active">Сводка</a></li>
+            </ul>
+        </nav>
+        <div class="sidebar-footer">
+            <div class="user-info">
+                👤 <span id="userName">Загрузка...</span>
+                <span id="userRole">Загрузка...</span>
+            </div>
+            <a href="#" id="logoutBtn" class="logout-button">Выйти</a>
+        </div>
+    </aside>
+
+    <main class="content">
+        <h1>🗓️ Сводка</h1>
+        
+        <div class="summary-grid">
+            <div class="summary-widget">
+                <div class="widget-header">
+                    <label for="summaryDate">Готово за день</label>
+                    <input type="date" id="summaryDate">
+                </div>
+                <div id="dailyCount" class="widget-value">...</div>
+            </div>
+
+            <div class="summary-widget">
+                <div class="widget-header">
+                    <span>🏆 Всего готово</span>
+                </div>
+                <div id="totalFinished" class="widget-value">...</div>
+            </div>
+        </div>
+
+    </main>
+    
+    <script src="/js/main.js"></script>
+    <script src="/js/summary.js"></script>
+</body>
+</html>

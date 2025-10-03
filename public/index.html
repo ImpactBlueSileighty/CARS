@@ -15,7 +15,8 @@
       <ul>
         <li><a href="/">Список бортов</a></li>
         <li><a href="/bpla.html">Прошивки и Дампы</a></li>
-        </ul>
+        <li><a href="/summary.html">Сводка</a></li> 
+      </ul>
     </nav>
     <div class="sidebar-footer">
       <div class="user-info">
@@ -43,6 +44,13 @@
           </label>
           <label>ПК:
             <select id="controllerFilter"></select>
+          </label>
+          <label>Статус:
+            <select id="statusFilter">
+              <option value="">Любой статус</option>
+              <option value="finished">Готовые</option>
+              <option value="in_progress">В работе</option>
+            </select>
           </label>
         </div>
 
@@ -91,7 +99,7 @@
         <th>Свечи</th>
         <th>Обкатка</th>
         <th>Описание</th>
-        <th style="width: 110px;">Дата созд.</th>
+        <th style="width: 110px;">Дата готовности</th>
         <th>Действия</th> </tr>
     </thead>
     <tbody id="boardTable"></tbody>
@@ -212,8 +220,9 @@
         controller_id: document.getElementById('controllerFilter').value || null,
         date_from: document.getElementById('dateFrom').value,
         date_to: document.getElementById('dateTo').value,
-        // --- ДОБАВЬТЕ ЭТУ СТРОКУ ---
-        engine_start: document.getElementById('engineStartFilter').checked
+        status: document.getElementById('statusFilter').value,
+        // Теперь здесь нет старых traction, angle, etc.
+        // engine_start тоже убран, так как он часть логики "Готовые"
       };
     }
 
@@ -458,7 +467,7 @@
                 <td>${board.controller_name || 'N/A'}</td>
                 ${paramsHtml}
                 <td>${board.description || ''}</td>
-                <td>${formatDate(board.sold_date)}</td>
+                <td>${formatDate(board.finished_date)}</td>
                 <td><button onclick="editBoard(${board.id})">✏️</button></td>
                 <td><button onclick="deleteBoard(${board.id})">🗑</button></td>
             `;
@@ -655,18 +664,29 @@
             const boardId = checkbox.dataset.boardId;
             const paramName = checkbox.dataset.paramName;
             const today = new Date().toLocaleDateString('sv-SE');
-            
             const dateToSet = checkbox.checked ? today : null;
             
-            checkbox.disabled = true; // Блокируем на время запроса
+            checkbox.disabled = true;
             const success = await updateBoardParameter(boardId, paramName, dateToSet);
             checkbox.disabled = false;
 
             if (success) {
                 const dateDisplay = document.getElementById(`date-${boardId}-${paramName}`);
                 dateDisplay.textContent = checkbox.checked ? new Date().toLocaleDateString('ru-RU') : '';
+
+                // --- ДОБАВЛЕНО ИСПРАВЛЕНИЕ ---
+                // Если мы поставили галочку (а не сняли), есть шанс, что борт стал "готовым".
+                // Поэтому мы принудительно перезагружаем всю таблицу, чтобы увидеть обновленную "Дату готовности".
+                if (checkbox.checked) {
+                    // Небольшая задержка, чтобы вы успели увидеть, как проставилась дата под галочкой
+                    setTimeout(() => {
+                        loadFilteredBoards();
+                    }, 200); 
+                }
+                // -------------------------
+
             } else {
-                checkbox.checked = !checkbox.checked; // Возвращаем в исходное состояние при ошибке
+                checkbox.checked = !checkbox.checked;
             }
         }
     });
