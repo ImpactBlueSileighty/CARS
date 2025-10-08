@@ -3,52 +3,239 @@
 <head>
     <meta charset="UTF-8" />
     <title>ЦАРС - Сводка</title>
-    <link rel="stylesheet" href="style/main.css" />
+    <link rel="stylesheet" href="/style/main.css" />
 </head>
 <body>
-    <aside class="sidebar">
-        <div class="sidebar-header">
-            <h2>ЦАРС</h2>
-        </div>
-        <nav class="sidebar-nav">
+
+<aside class="sidebar">
+    <div class="sidebar-header">
+        <h2>ЦАРС</h2>
+    </div>
+
+    <nav class="sidebar-nav">
+        <details class="nav-section">
+            <summary class="nav-title">Слесарный цех</summary>
             <ul>
                 <li><a href="/">Список бортов</a></li>
-                <li><a href="/bpla.html">Прошивки и Дампы</a></li>
-                <li><a href="/summary.html" class="active">Сводка</a></li>
             </ul>
-        </nav>
-        <div class="sidebar-footer">
-            <div class="user-info">
-                👤 <span id="userName">Загрузка...</span>
-                <span id="userRole">Загрузка...</span>
-            </div>
-            <a href="#" id="logoutBtn" class="logout-button">Выйти</a>
+        </details>
+        <details class="nav-section">
+            <summary class="nav-title">Отдел настройки</summary>
+            <ul>
+                <li><a href="/setup.html">Список бортов</a></li>
+                <li><a href="/bpla.html">Прошивки и Дампы</a></li>
+            </ul>
+        </details>
+        <div class="nav-common">
+            <ul>
+                <li><a href="/summary.html">Сводка</a></li>
+            </ul>
         </div>
-    </aside>
+    </nav>
 
-    <main class="content">
-        <h1>🗓️ Сводка</h1>
-        
-        <div class="summary-grid">
-            <div class="summary-widget">
-                <div class="widget-header">
-                    <label for="summaryDate">Готово за день</label>
-                    <input type="date" id="summaryDate">
-                </div>
-                <div id="dailyCount" class="widget-value">...</div>
-            </div>
-
-            <div class="summary-widget">
-                <div class="widget-header">
-                    <span>🏆 Всего готово</span>
-                </div>
-                <div id="totalFinished" class="widget-value">...</div>
-            </div>
+    <div class="sidebar-footer">
+        <div class="user-info">
+        <div class="user-avatar">🦛</div>
+        <div class="user-details">
+            <span id="userName">Загрузка...</span>
+            <span id="userRole">Роль не задана</span>
         </div>
+        </div>
+        <a href="#" id="logoutBtn" class="logout-button">Выйти</a>
+    </div>
+</aside>
 
-    </main>
+<main class="content">
+    <h1>Общая сводка по бортам</h1>
+    <p class="subtitle">Статус готовности всех бортов в системе.</p>
+
+    <div id="summaryStatisticsContainer" class="summary-stats-grid"></div>
+
+    <details class="filter-box">
+        <summary>🔍 Фильтр и поиск</summary>
+        <form id="filterForm" class="filter-form">
+            <div class="filter-controls">
+                <div class="primary-filters">
+                    <label>Номер борта: <input type="text" id="numberFilter" placeholder="Введите номер..." /></label>
+                    <label>Поставщик: <select id="supplierFilter"><option value="">Все</option></select></label>
+                    <label>Тип БПЛА: <select id="bplaFilter"><option value="">Все</option></select></label>
+                    <label>Статус:
+                        <select id="statusFilter">
+                            <option value="">Любой</option>
+                            <option value="finished">Готовые (зеленые)</option>
+                            <option value="overdue">Просрочено (красные)</option>
+                            <option value="today">В работе (оранжевые)</option>
+                        </select>
+                    </label>
+                </div>
+            </div>
+            <div class="filter-actions">
+                <button type="button" id="resetFilterBtn">Сбросить</button>
+                <button type="submit">Применить</button>
+            </div>
+        </form>
+    </details>
+
+     <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Номер</th> <th>Тип</th> <th>Поставщик</th>
+                    <th>Слесарный цех</th> <th>Отдел настройки</th>
+                    <th>Дата создания</th> <th>Дата готовности</th>
+                </tr>
+            </thead>
+            <tbody id="summaryTableBody"></tbody>
+        </table>
+    </div>
+</main>
+
+<script src="/js/main.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    const tableBody = document.getElementById('summaryTableBody');
+    const statsContainer = document.getElementById('summaryStatisticsContainer');
+
+    // --- НОВЫЕ ФУНКЦИИ для загрузки списков в фильтры ---
+    const loadSuppliers = async () => {
+        const select = document.getElementById('supplierFilter');
+        try {
+            const res = await fetch('/api/suppliers');
+            const suppliers = await res.json();
+            suppliers.forEach(s => {
+                const option = document.createElement('option');
+                option.value = s.id;
+                option.textContent = s.name;
+                select.appendChild(option);
+            });
+        } catch(e) { console.error("Ошибка загрузки поставщиков"); }
+    };
+
+    const loadBplaTypes = async () => {
+        const select = document.getElementById('bplaFilter');
+        try {
+            const res = await fetch('/api/bpla');
+            const bplaTypes = await res.json();
+            bplaTypes.forEach(type => {
+                const option = document.createElement('option');
+                option.value = type.id;
+                option.textContent = type.name;
+                select.appendChild(option);
+            });
+        } catch(e) { console.error("Ошибка загрузки типов БПЛА"); }
+    };
+
+    const getFilters = () => ({
+        number: document.getElementById('numberFilter').value.trim(),
+        supplier_id: document.getElementById('supplierFilter').value || null,
+        bpla_id: document.getElementById('bplaFilter').value || null,
+        status: document.getElementById('statusFilter').value,
+    });
+
+    const renderStats = (stats) => {
+        if (!statsContainer) return;
+        statsContainer.innerHTML = '';
+        stats.forEach(stat => {
+            const card = document.createElement('div');
+            card.className = 'stat-card';
+
+            // Формируем строку для счетчика "за сегодня", только если он больше нуля
+            const todayCountHtml = stat.green_today > 0 
+                ? `<span class="stat-today">(+${stat.green_today})</span>` 
+                : '';
+
+            card.innerHTML = `
+                <div class="stat-card-title">${stat.bpla_name || 'Не указан'}</div>
+                <div class="stat-card-body">
+                    <div class="stat-card-row">
+                        <span class="stat-label green">Готовые</span>
+                        <span class="stat-value">${stat.green} ${todayCountHtml}</span>
+                    </div>
+                    <div class="stat-card-row"><span class="stat-label red">Полуфабрикаты</span> <span class="stat-value">${stat.red}</span></div>
+                    <div class="stat-card-row"><span class="stat-label orange">В работе (сегодня)</span> <span class="stat-value">${stat.orange}</span></div>
+                </div>
+            `;
+            statsContainer.appendChild(card);
+        });
+    };
+
+    const renderTable = (boards) => {
+        tableBody.innerHTML = '';
+        if (!boards || boards.length === 0) {
+            tableBody.innerHTML = `<tr><td colspan="7" style="text-align: center;">Нет данных</td></tr>`;
+            return;
+        }
+        const formatDate = date => date ? new Date(date).toLocaleDateString('ru-RU') : '—';
+        boards.forEach(board => {
+            const tr = document.createElement('tr');
+
+            // --- УПРОЩЕННАЯ ЛОГИКА ПОДСВЕТКИ ---
+            // Просто используем статус, который прислал сервер
+            if (board.status_color === 'green') {
+                tr.className = 'row-finished';
+            } else if (board.status_color === 'orange') {
+                tr.className = 'row-in-progress-today';
+            } else if (board.status_color === 'red') {
+                tr.className = 'row-in-progress-overdue';
+            }
+
+            tr.innerHTML = `
+                <td>${board.number}</td>
+                <td>${board.bpla_name || 'N/A'}</td>
+                <td>${board.supplier_name || 'N/A'}</td>
+                <td>${board.workshop_complete ? '✅' : '❌'}</td>
+                <td>${board.setup_complete ? '✅' : '❌'}</td>
+                <td>${formatDate(board.creation_date)}</td>
+                <td>${formatDate(board.finished_date)}</td>
+            `;
+            tableBody.appendChild(tr);
+        });
+    };
+
+    const loadSummaryData = async (filters = {}) => {
+        try {
+            const [statsRes, boardsRes] = await Promise.all([
+                fetch('/api/summary/statistics'),
+                fetch('/api/summary/filter', { 
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(filters)
+                })
+            ]);
+
+            if (!statsRes.ok || !boardsRes.ok) {
+                // Попытаемся получить текст ошибки с сервера
+                const errorText = await (statsRes.ok ? boardsRes : statsRes).text();
+                throw new Error(`Ошибка ответа сервера: ${errorText}`);
+            }
+
+            renderStats(await statsRes.json());
+            renderTable(await boardsRes.json());
+        } catch (error) {
+            console.error('Ошибка загрузки сводки:', error);
+            if(statsContainer) statsContainer.innerHTML = '<p>Ошибка загрузки статистики.</p>';
+            if(tableBody) tableBody.innerHTML = `<tr><td colspan="7" style="text-align: center;">Ошибка загрузки таблицы.</td></tr>`;
+        }
+    };
     
-    <script src="/js/main.js"></script>
-    <script src="/js/summary.js"></script>
+    document.getElementById('filterForm').addEventListener('submit', (e) => {
+        e.preventDefault();
+        loadSummaryData(getFilters());
+    });
+
+    document.getElementById('resetFilterBtn').addEventListener('click', () => {
+        document.getElementById('filterForm').reset();
+        loadSummaryData();
+    });
+
+    const initPage = async () => {
+        await loadSuppliers();
+        await loadBplaTypes();
+        await loadSummaryData();
+    };
+
+    initPage();
+});
+</script>
 </body>
 </html>

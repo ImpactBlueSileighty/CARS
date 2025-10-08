@@ -8,30 +8,45 @@
 <body>
 
   <aside class="sidebar">
-    <div class="sidebar-header">
-      <h2>ЦАРС</h2>
-    </div>
-    <nav class="sidebar-nav">
-      <ul>
-        <li><a href="/">Список бортов</a></li>
-        <li><a href="/bpla.html">Прошивки и Дампы</a></li>
-        <li><a href="/summary.html">Сводка</a></li> 
-      </ul>
-    </nav>
-    <div class="sidebar-footer">
-      <div class="user-info">
-        👤 <span id="userName">Загрузка...</span>
-        <span id="userRole">Загрузка...</span>
+      <div class="sidebar-header">
+          <h2>ЦАРС</h2>
       </div>
-      <a href="#" id="logoutBtn" class="logout-button">Выйти</a>
-    </div>
+
+      <nav class="sidebar-nav">
+          <details class="nav-section">
+              <summary class="nav-title">Слесарный цех</summary>
+              <ul>
+                  <li><a href="/">Список бортов</a></li>
+              </ul>
+          </details>
+          <details class="nav-section">
+              <summary class="nav-title">Отдел настройки</summary>
+              <ul>
+                  <li><a href="/setup.html">Список бортов</a></li>
+                  <li><a href="/bpla.html">Прошивки и Дампы</a></li>
+              </ul>
+          </details>
+          <div class="nav-common">
+              <ul>
+                  <li><a href="/summary.html">Сводка</a></li>
+              </ul>
+          </div>
+      </nav>
+
+      <div class="sidebar-footer">
+          <div class="user-info">
+            <div class="user-avatar">🦛</div>
+            <div class="user-details">
+              <span id="userName">Загрузка...</span>
+              <span id="userRole">Роль не задана</span>
+            </div>
+          </div>
+          <a href="#" id="logoutBtn" class="logout-button">Выйти</a>
+      </div>
   </aside>
 
 <main class="content">
-  <h1>Список бортов</h1>
-  <div id="statisticsContainer" class="statistics-container">
-  </div>
-  <button id="openModalBtn">➕ Добавить борт</button>
+  <h1>Отдел настройки. Список бортов</h1>
   <div id="bplaTabs" class="tabs-container"></div>
   <div id="bplaSubTabs" class="sub-tabs-container"></div>
   <details class="filter-box">
@@ -188,7 +203,6 @@
     const form = document.getElementById('boardForm');
     const tableBody = document.getElementById('boardTable');
     const addModal = document.getElementById('addModal');
-    const openModalBtn = document.getElementById('openModalBtn');
     const closeModalBtn = document.getElementById('closeModalBtn');
     const tabsContainer = document.getElementById('bplaTabs');
     const subTabsContainer = document.getElementById('bplaSubTabs');
@@ -216,44 +230,22 @@
 
     function getFilters() {
       return {
-        number: document.getElementById('numberFilter').value.trim(),
-        controller_id: document.getElementById('controllerFilter').value || null,
-        date_from: document.getElementById('dateFrom').value,
-        date_to: document.getElementById('dateTo').value,
-        status: document.getElementById('statusFilter').value,
-        // Теперь здесь нет старых traction, angle, etc.
-        // engine_start тоже убран, так как он часть логики "Готовые"
-      };
-    }
+          number: document.getElementById('numberFilter').value.trim(),
+          controller_id: document.getElementById('controllerFilter').value || null,
+          date_from: document.getElementById('dateFrom').value,
+          date_to: document.getElementById('dateTo').value,
+          status: document.getElementById('statusFilter').value,
 
-    async function loadAndDisplayStatistics() {
-      const container = document.getElementById('statisticsContainer');
-      if (!container) return;
-      try {
-        const res = await fetch('/api/statistics');
-        if (!res.ok) throw new Error('Ошибка сети');
-        const stats = await res.json();
-        if (stats.length === 0) {
-          container.innerHTML = '<p>Нет данных для статистики.</p>';
-          return;
-        }
-        let html = '';
-        stats.forEach(typeStat => {
-          html += `
-            <div class="stat-item">
-              <div class="stat-title">Всего "${typeStat.name}": ${typeStat.total_count}</div>
-              <div class="stat-values">
-                <span class="finished">✅ Готовые: ${typeStat.finished_count}</span>
-                <span class="semi-finished">🛠️ В работе: ${typeStat.semi_finished_count}</span>
-              </div>
-            </div>`;
-        });
-        container.innerHTML = html;
-      } catch (error) {
-        console.error("Не удалось загрузить статистику:", error);
-        container.innerHTML = '<p>Не удалось загрузить статистику.</p>';
-      }
-    }
+          // --- ЭТИ СТРОКИ БЫЛИ ПРОПУЩЕНЫ ---
+          traction: document.getElementById('tractionFilter').checked,
+          angle: document.getElementById('angleFilter').checked,
+          acceleration: document.getElementById('accelerationFilter').checked,
+          osd: document.getElementById('osdFilter').checked,
+          osd_configured: document.getElementById('osdConfiguredFilter').checked,
+          plugs: document.getElementById('plugsFilter').checked,
+          engine_start: document.getElementById('engineStartFilter').checked
+      };
+  }
 
     async function loadControllers() {
       const res = await fetch('/api/controllers');
@@ -356,13 +348,6 @@
             console.error('Ошибка при открытии редактирования:', error);
             alert('Не удалось загрузить данные для редактирования.');
         }
-    }
-
-    window.deleteBoard = async function(id) {
-      if (!confirm('Вы уверены, что хотите удалить борт?')) return;
-      await fetch('/api/board/' + id, { method: 'DELETE' });
-      loadFilteredBoards();
-      loadAndDisplayStatistics();
     }
     
     window.zoomImage = function(img) {
@@ -469,7 +454,6 @@
                 <td>${board.description || ''}</td>
                 <td>${formatDate(board.finished_date)}</td>
                 <td><button onclick="editBoard(${board.id})">✏️</button></td>
-                <td><button onclick="deleteBoard(${board.id})">🗑</button></td>
             `;
             tableBody.appendChild(tr);
         });
@@ -560,28 +544,17 @@
 
     // --- 5. Настройка обработчиков событий ---
     
-    openModalBtn.onclick = () => {
-        form.reset();
-        document.querySelectorAll('.param-date-input').forEach(input => input.classList.remove('visible'));
-        editBoardId = null;
-        
-        // ИСПРАВЛЕННАЯ ЛОГИКА: используем правильные переменные для вкладок
-        if (currentSubTabId && currentSubTabId !== currentMainTabId) {
-            document.getElementById('bplaId').value = currentSubTabId;
-        } else if (currentMainTabId) {
-            document.getElementById('bplaId').value = currentMainTabId;
-        }
-        
-        addModal.style.display = 'flex'; // Показываем модальное окно
-    };
 
     closeModalBtn.onclick = () => addModal.style.display = 'none';
     window.onclick = e => {  if (e.target === addModal) addModal.style.display = 'none'; };
     form.addEventListener('submit', async (e) => {
       e.preventDefault(); // Предотвращаем стандартную отправку формы
 
-      // --- ИЗМЕНЕНО ---
-      // Собираем данные ТОЛЬКО из полей с датами, как и договаривались.
+      if (!editBoardId) {
+        alert('Ошибка: борт не выбран для редактирования.');
+        return;
+      }
+
       const body = {
           bpla_id: document.getElementById('bplaId').value,
           number: document.getElementById('number').value,
@@ -598,31 +571,15 @@
       };
 
       const photoFile = document.getElementById('photo').files[0];
-      let method = 'POST';
-      let url = '/api/add_board';
-      let boardIdForPhoto = null; // Переменная для ID борта для загрузки фото
 
-      // Если editBoardId установлен, значит мы редактируем, а не создаем
-      if (editBoardId) {
-          method = 'PUT';
-          url = `/api/board/${editBoardId}`;
-          boardIdForPhoto = editBoardId;
-      }
 
       try {
-          const res = await fetch(url, {
-              method: method,
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(body)
+          await fetch(`/api/board/${editBoardId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
           });
-
-          if (!res.ok) throw new Error('Ошибка сохранения данных борта');
-          
-          // Если это был новый борт, нам нужно получить его ID для загрузки фото
-          if (method === 'POST') {
-              const newBoard = await res.json();
-              boardIdForPhoto = newBoard.id;
-          }
+        
 
           // Логика загрузки фото (теперь работает и для новых бортов)
           if (photoFile && boardIdForPhoto) {
@@ -643,7 +600,6 @@
       // После успешной отправки закрываем окно и обновляем данные
       addModal.style.display = 'none';
       loadFilteredBoards();
-      loadAndDisplayStatistics();
     });
 
     document.getElementById('filterForm').addEventListener('submit', (e) => {
@@ -710,7 +666,6 @@
             }
         });
         await loadSuppliers();
-        await loadAndDisplayStatistics();
         await loadBplaTypesForModal();
         await loadControllers();
         await loadControllerFilters();

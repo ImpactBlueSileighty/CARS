@@ -61,66 +61,178 @@ button:hover {
     box-shadow: 2px 0 5px rgba(0, 0, 0, 0.05);
     display: flex;
     flex-direction: column;
-    z-index: 1001; /* Выше чем модальное окно */
+    z-index: 1001;
 }
 .sidebar-header {
     padding: 1.5rem 1.5rem 1rem;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid var(--border-color);
 }
 .sidebar-header h2 {
     font-size: 1.5rem;
     color: var(--primary);
-    font-weight: bold;
+    font-weight: 600;
     margin: 0;
     text-align: center;
 }
 .sidebar-nav {
     flex-grow: 1;
-    padding: 1.5rem 0;
+    padding: 1rem 0;
 }
-.sidebar-nav ul {
+
+/* Стили для секций аккордеона */
+.nav-section {
+    border-bottom: 1px solid var(--border-color);
+}
+.nav-title {
+    display: block; /* Убираем стандартный маркер */
+    padding: 14px 24px;
+    font-weight: 600;
+    color: var(--primary);
+    cursor: pointer;
+    position: relative;
+    transition: background-color 0.2s;
+}
+.nav-title::-webkit-details-marker { display: none; } /* Убираем маркер в Chrome/Safari */
+.nav-title::after { /* Рисуем свою стрелку-шеврон */
+    content: '›';
+    position: absolute;
+    right: 20px;
+    top: 50%;
+    transform: translateY(-50%) rotate(90deg);
+    font-size: 1.5rem;
+    color: #aaa;
+    transition: transform 0.2s;
+}
+.nav-section[open] > .nav-title::after {
+    transform: translateY(-50%) rotate(-90deg); /* Анимация стрелки при открытии */
+}
+.nav-title:hover {
+    background-color: #f5f5f5;
+}
+
+.nav-common {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-color); /* Разделительная линия */
+}
+
+.nav-common ul {
     list-style: none;
     padding: 0;
     margin: 0;
 }
-.sidebar-nav a {
+
+.nav-common a {
+    text-decoration: none;
+    color: var(--primary); /* Более заметный цвет */
+    font-weight: 600; /* Делаем жирнее */
+    display: block;
+    padding: 14px 24px;
+    transition: all 0.2s ease;
+}
+
+.nav-common a:hover {
+    background-color: #f5f5f5;
+    color: var(--accent);
+}
+
+/* Стиль для активной общей ссылки */
+.nav-common a.active {
+    color: var(--accent);
+    font-weight: bold;
+    border-left: 3px solid var(--accent);
+    background-color: #e8f8f5;
+    padding-left: 21px; /* Компенсируем border-left */
+}
+
+/* Стили для вложенного списка */
+.nav-section ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    background-color: #f9fafb;
+}
+.nav-section a {
     text-decoration: none;
     color: var(--text);
     font-weight: 500;
     display: block;
-    padding: 12px 24px;
+    padding: 12px 24px 12px 40px; /* Добавляем отступ слева */
     transition: all 0.2s ease;
 }
-.sidebar-nav a:hover {
-    background-color: #f5f5f5;
+.nav-section a:hover {
+    background-color: #f0fafa;
     color: var(--accent);
 }
-.sidebar-nav a.active {
+.nav-section a.active {
     color: var(--accent);
     font-weight: bold;
     border-left: 3px solid var(--accent);
-    background-color: #f0fafa;
+    background-color: #e8f8f5;
+    padding-left: 37px; /* Компенсируем border-left */
 }
+
+/* --- Стили для профиля в футере сайдбара --- */
 .sidebar-footer {
     padding: 1rem 1.5rem;
-    border-top: 1px solid #eee;
+    border-top: 1px solid var(--border-color);
 }
+
 .user-info {
-    font-size: 0.9rem;
-    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 1rem;
 }
+
+.user-avatar {
+    font-size: 2.2rem;
+    line-height: 1;
+    background-color: var(--light-gray);
+    padding: 8px;
+    border-radius: 50%;
+    color: var(--primary);
+}
+
+.user-details {
+    display: flex;
+    flex-direction: column;
+}
+
+#userName {
+    font-weight: 600;
+    color: var(--primary);
+    font-size: 0.95rem;
+}
+
+#userRole {
+    font-size: 0.8rem;
+    color: var(--text-light);
+}
+
+.logout-button {
+    font-weight: 600;
+    background-color: var(--danger);
+}
+
+.logout-button:hover {
+    background-color: #c0392b;
+}
+
 .logout-button {
     display: block;
     text-align: center;
     padding: 8px;
-    background-color: #e74c3c;
-    color: white;
+    background-color: var(--danger, #e74c3c); /* Явно задаем красный фон */
+    color: var(--white, #fff); /* Явно задаем белый цвет текста */
     text-decoration: none;
-    border-radius: 4px;
-    transition: background-color 0.2s;
+    border-radius: 6px; /* Используем стандартный радиус */
+    font-weight: 600;
+    transition: background-color 0.2s ease;
 }
+
 .logout-button:hover {
-    background-color: #c0392b;
+    background-color: #c0392b; /* Более темный красный при наведении */
 }
 
 /* === Вкладки (Tabs) === */
@@ -378,7 +490,7 @@ td:first-child img {
     margin: 0 auto;
 }
 
-td:nth-child(12) { /* Описание */
+td:nth-child(16) { 
     white-space: normal;
     min-width: 150px;
     text-align: left;
@@ -603,4 +715,196 @@ select:focus {
     color: var(--accent);
     text-align: center;
     line-height: 1.1;
+}
+
+.subtitle {
+    text-align: center;
+    margin-top: -1.5rem;
+    margin-bottom: 2rem;
+    color: var(--text-light);
+}
+
+.summary-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.stat-card {
+    background: var(--white);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    box-shadow: var(--shadow);
+}
+
+.stat-card-title {
+    font-weight: 600;
+    color: var(--primary);
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+}
+
+.stat-card-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.95rem;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #eee;
+}
+.stat-card-row:last-child {
+    border-bottom: none;
+}
+
+.stat-label::before {
+    content: '';
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-right: 8px;
+}
+
+.stat-label.green::before { background-color: #27ae60; }
+.stat-label.red::before { background-color: #e74c3c; }
+.stat-label.orange::before { background-color: #e67e22; }
+
+.stat-value {
+    font-weight: 700;
+    font-size: 1.1rem;
+}
+
+/* Цвета для строк таблицы */
+tr.row-finished { background-color: #e8f8f5; }
+tr.row-in-progress-overdue { background-color: #fdeded; }
+tr.row-in-progress-today { background-color: #fef5e7; }
+
+.stat-value .stat-today {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--accent);
+    margin-left: 8px;
+}
+
+/* --- Стили для комментариев в таблице --- */
+.parameter-cell {
+    position: relative; /* Для позиционирования дочерних элементов */
+}
+
+/* Иконка-индикатор наличия комментария */
+.comment-indicator {
+    position: absolute;
+    top: 2px;
+    left: 4px;
+    font-size: 10px;
+    color: #3498db;
+}
+
+/* Кнопка редактирования, появляется при наведении */
+.edit-comment-btn {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    
+    /* Задаем жесткие размеры */
+    width: 24px;
+    height: 24px;
+    
+    padding: 0; /* Убираем лишние отступы */
+    background: rgba(0, 0, 0, 0.05); /* Легкий фон для заметности */
+    border: none;
+    border-radius: 50%; /* Делаем кнопку круглой */
+    box-shadow: none;
+    font-size: 14px;
+    cursor: pointer;
+    opacity: 0; /* По умолчанию скрыта */
+    transition: all 0.2s;
+
+    /* Центрируем иконку-эмодзи внутри кнопки */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    line-height: 1;
+}
+
+/* Показываем кнопку при наведении на ячейку */
+.parameter-cell:hover .edit-comment-btn {
+    opacity: 1;
+    background: rgba(0, 0, 0, 0.1);
+}
+
+/* Подсвечиваем кнопку при наведении на нее саму */
+.edit-comment-btn:hover {
+    background: var(--accent);
+    color: white;
+    transform: scale(1.1);
+}
+
+/* Всплывающая подсказка (тултип) */
+.comment-tooltip {
+    position: fixed;
+    background: #333;
+    color: white;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    z-index: 1002;
+    max-width: 300px;
+    pointer-events: none; /* Чтобы не мешал наведению мыши */
+}
+
+/* Окно редактирования комментария */
+.comment-editor-modal {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0, 0, 0, 0.4);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1001;
+}
+.comment-editor-content {
+    background: var(--white);
+    padding: 20px;
+    border-radius: var(--radius);
+    width: 90%;
+    max-width: 400px;
+    box-shadow: var(--shadow);
+}
+.comment-editor-content h4 {
+    margin-top: 0;
+}
+#commentTextarea {
+    width: 100%;
+    resize: vertical;
+}
+.comment-editor-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.parameter-cell.has-comment {
+    background-color: #fdeded; /* Светло-красный фон */
+    cursor: help; /* Курсор в виде знака вопроса */
+}
+
+/* Обновленные стили для окна редактирования */
+.comment-editor-actions {
+    display: flex;
+    justify-content: space-between; /* Разносим кнопки по краям */
+    align-items: center;
+    gap: 10px;
+    margin-top: 15px;
+}
+
+/* Стиль для кнопки "Удалить" */
+.btn-danger {
+    background-color: var(--danger, #e74c3c);
+}
+.btn-danger:hover {
+    background-color: #c0392b;
 }

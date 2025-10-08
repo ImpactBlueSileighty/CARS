@@ -30,193 +30,323 @@
 
     /* === Боковая панель (сайдбар) === */
     .sidebar {
-        position: fixed;
-        left: 0;
-        top: 0;
-        width: 220px;
-        height: 100vh;
-        background-color: var(--white);
-        box-shadow: 2px 0 5px rgba(0, 0, 0, 0.05);
-        display: flex;
-        flex-direction: column;
-        z-index: 1001; /* Выше чем модальное окно */
-    }
-    .sidebar-header {
-        padding: 1.5rem 1.5rem 1rem;
-        border-bottom: 1px solid #eee;
-    }
-    .sidebar-header h2 {
-        font-size: 1.5rem;
-        color: var(--primary);
-        font-weight: bold;
-        margin: 0;
-        text-align: center;
-    }
-    .sidebar-nav {
-        flex-grow: 1;
-        padding: 1.5rem 0;
-    }
-    .sidebar-nav ul {
-        list-style: none;
-        padding: 0;
-        margin: 0;
-    }
-    .sidebar-nav a {
-        text-decoration: none;
-        color: var(--text);
-        font-weight: 500;
-        display: block;
-        padding: 12px 24px;
-        transition: all 0.2s ease;
-    }
-    .sidebar-nav a:hover {
-        background-color: #f5f5f5;
-        color: var(--accent);
-    }
-    .sidebar-nav a.active {
-        color: var(--accent);
-        font-weight: bold;
-        border-left: 3px solid var(--accent);
-        background-color: #f0fafa;
-    }
-    .sidebar-footer {
-        padding: 1rem 1.5rem;
-        border-top: 1px solid #eee;
-    }
-    .user-info {
-        font-size: 0.9rem;
-        margin-bottom: 0.75rem;
-    }
-    .logout-button {
-        display: block;
-        text-align: center;
-        padding: 8px;
-        background-color: #e74c3c;
-        color: white;
-        text-decoration: none;
-        border-radius: 4px;
-        transition: background-color 0.2s;
-    }
-    .logout-button:hover {
-        background-color: #c0392b;
-    }
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 220px;
+    height: 100vh;
+    background-color: var(--white);
+    box-shadow: 2px 0 5px rgba(0, 0, 0, 0.05);
+    display: flex;
+    flex-direction: column;
+    z-index: 1001;
+}
+.sidebar-header {
+    padding: 1.5rem 1.5rem 1rem;
+    border-bottom: 1px solid var(--border-color);
+}
+.sidebar-header h2 {
+    font-size: 1.5rem;
+    color: var(--primary);
+    font-weight: 600;
+    margin: 0;
+    text-align: center;
+}
+.sidebar-nav {
+    flex-grow: 1;
+    padding: 1rem 0;
+}
 
-    /* === Основной контент — чтобы не перекрывался сайдбаром === */
-    .content {
-      margin-left: 240px; /* Ширина сайдбара + отступ */
-    }
+/* Стили для секций аккордеона */
+.nav-section {
+    border-bottom: 1px solid var(--border-color);
+}
+.nav-title {
+    display: block; /* Убираем стандартный маркер */
+    padding: 14px 24px;
+    font-weight: 600;
+    color: var(--primary);
+    cursor: pointer;
+    position: relative;
+    transition: background-color 0.2s;
+}
+.nav-title::-webkit-details-marker { display: none; } /* Убираем маркер в Chrome/Safari */
+.nav-title::after { /* Рисуем свою стрелку-шеврон */
+    content: '›';
+    position: absolute;
+    right: 20px;
+    top: 50%;
+    transform: translateY(-50%) rotate(90deg);
+    font-size: 1.5rem;
+    color: #aaa;
+    transition: transform 0.2s;
+}
+.nav-section[open] > .nav-title::after {
+    transform: translateY(-50%) rotate(-90deg); /* Анимация стрелки при открытии */
+}
+.nav-title:hover {
+    background-color: #f5f5f5;
+}
 
-    button {
-      padding: 10px 20px;
-      background-color: var(--accent);
-      border: none;
-      border-radius: var(--radius);
-      color: var(--white);
-      font-weight: bold;
-      cursor: pointer;
-      box-shadow: var(--shadow);
-      transition: background 0.2s ease;
-    }
-    button:hover {
-      background-color: #17a689;
-    }
+.nav-common {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-color); /* Разделительная линия */
+}
 
-    .form-group {
-      max-width: 500px;
-      margin: 2rem auto;
-      background: var(--white);
-      padding: 20px;
-      border-radius: var(--radius);
-      box-shadow: var(--shadow);
-    }
-    .form-group label {
-      display: block;
-      margin-bottom: 5px;
-      font-weight: 500;
-    }
-    .form-group select {
-      width: 100%;
-      padding: 10px;
-      margin-bottom: 15px;
-      border: 1px solid #ccc;
-      border-radius: var(--radius);
-    }
+.nav-common ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
 
-    .result {
-      max-width: 800px;
-      margin: 2rem auto;
-      background: var(--white);
-      padding: 20px;
-      border-radius: var(--radius);
-      box-shadow: var(--shadow);
-    }
-    .result h3 {
-      margin-top: 0;
-      color: var(--primary);
-    }
-    .file-item {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 10px;
-      background: #f9f9f9;
-      border: 1px solid #eee;
-      border-radius: 6px;
-      margin-bottom: 10px;
-    }
-    .file-item a {
-      color: var(--accent);
-      text-decoration: none;
-      font-weight: bold;
-    }
-    .file-item a:hover {
-      text-decoration: underline;
-    }
+.nav-common a {
+    text-decoration: none;
+    color: var(--primary); /* Более заметный цвет */
+    font-weight: 600; /* Делаем жирнее */
+    display: block;
+    padding: 14px 24px;
+    transition: all 0.2s ease;
+}
 
-    details {
-      margin-top: 20px;
-    }
-    details summary {
-      cursor: pointer;
-      font-weight: 600;
-      color: var(--primary);
-    }
-    .version-list {
-      margin-top: 10px;
-    }
-    .version-item {
-      padding: 8px;
-      background: #f0f0f0;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      margin-bottom: 5px;
-      font-size: 0.95rem;
-    }
-    .version-item a {
-      color: var(--accent);
-      margin-left: 10px;
-    }
+.nav-common a:hover {
+    background-color: #f5f5f5;
+    color: var(--accent);
+}
 
-  </style>
+/* Стиль для активной общей ссылки */
+.nav-common a.active {
+    color: var(--accent);
+    font-weight: bold;
+    border-left: 3px solid var(--accent);
+    background-color: #e8f8f5;
+    padding-left: 21px; /* Компенсируем border-left */
+}
+
+/* Стили для вложенного списка */
+.nav-section ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    background-color: #f9fafb;
+}
+.nav-section a {
+    text-decoration: none;
+    color: var(--text);
+    font-weight: 500;
+    display: block;
+    padding: 12px 24px 12px 40px; /* Добавляем отступ слева */
+    transition: all 0.2s ease;
+}
+.nav-section a:hover {
+    background-color: #f0fafa;
+    color: var(--accent);
+}
+.nav-section a.active {
+    color: var(--accent);
+    font-weight: bold;
+    border-left: 3px solid var(--accent);
+    background-color: #e8f8f5;
+    padding-left: 37px; /* Компенсируем border-left */
+}
+
+.sidebar-footer {
+    padding: 1rem 1.5rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 1rem;
+}
+
+.user-avatar {
+    font-size: 2.2rem;
+    line-height: 1;
+    background-color: var(--light-gray);
+    padding: 8px;
+    border-radius: 50%;
+    color: var(--primary);
+}
+
+.user-details {
+    display: flex;
+    flex-direction: column;
+}
+
+#userName {
+    font-weight: 600;
+    color: var(--primary);
+    font-size: 0.95rem;
+}
+
+#userRole {
+    font-size: 0.8rem;
+    color: var(--text-light);
+}
+
+.logout-button {
+    font-weight: 600;
+    background-color: var(--danger);
+}
+
+.logout-button:hover {
+    background-color: #c0392b;
+}
+
+.logout-button {
+    display: block;
+    text-align: center;
+    padding: 8px;
+    background-color: var(--danger, #e74c3c); /* Явно задаем красный фон */
+    color: var(--white, #fff); /* Явно задаем белый цвет текста */
+    text-decoration: none;
+    border-radius: 6px; /* Используем стандартный радиус */
+    font-weight: 600;
+    transition: background-color 0.2s ease;
+}
+
+.logout-button:hover {
+    background-color: #c0392b; /* Более темный красный при наведении */
+}
+
+
+  /* === Основной контент — чтобы не перекрывался сайдбаром === */
+  .content {
+    margin-left: 240px; /* Ширина сайдбара + отступ */
+  }
+
+  button {
+    padding: 10px 20px;
+    background-color: var(--accent);
+    border: none;
+    border-radius: var(--radius);
+    color: var(--white);
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: var(--shadow);
+    transition: background 0.2s ease;
+  }
+  button:hover {
+    background-color: #17a689;
+  }
+
+  .form-group {
+    max-width: 500px;
+    margin: 2rem auto;
+    background: var(--white);
+    padding: 20px;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+  }
+  .form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 500;
+  }
+  .form-group select {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 15px;
+    border: 1px solid #ccc;
+    border-radius: var(--radius);
+  }
+
+  .result {
+    max-width: 800px;
+    margin: 2rem auto;
+    background: var(--white);
+    padding: 20px;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+  }
+  .result h3 {
+    margin-top: 0;
+    color: var(--primary);
+  }
+  .file-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px;
+    background: #f9f9f9;
+    border: 1px solid #eee;
+    border-radius: 6px;
+    margin-bottom: 10px;
+  }
+  .file-item a {
+    color: var(--accent);
+    text-decoration: none;
+    font-weight: bold;
+  }
+  .file-item a:hover {
+    text-decoration: underline;
+  }
+
+  details {
+    margin-top: 20px;
+  }
+  details summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--primary);
+  }
+  .version-list {
+    margin-top: 10px;
+  }
+  .version-item {
+    padding: 8px;
+    background: #f0f0f0;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    margin-bottom: 5px;
+    font-size: 0.95rem;
+  }
+  .version-item a {
+    color: var(--accent);
+    margin-left: 10px;
+  }
+
+</style>
 </head>
 <body>
   <aside class="sidebar">
-    <div class="sidebar-header">
-      <h2>ЦАРС</h2>
-    </div>
-    <nav class="sidebar-nav">
-      <ul>
-        <li><a href="/">Список бортов</a></li>
-        <li><a href="/bpla.html">Прошивки и Дампы</a></li>
-        <li><a href="/summary.html">Сводка</a></li> </ul>
-        </ul>
-    </nav>
-    <div class="sidebar-footer">
-      <div class="user-info">
-        👤 <span id="userName">Загрузка...</span>
-         <span id="userRole">Загрузка...</span>
+      <div class="sidebar-header">
+          <h2>ЦАРС</h2>
       </div>
-      <a href="#" id="logoutBtn" class="logout-button">Выйти</a>
+
+      <nav class="sidebar-nav">
+          <details class="nav-section">
+              <summary class="nav-title">Слесарный цех</summary>
+              <ul>
+                  <li><a href="/">Список бортов</a></li>
+              </ul>
+          </details>
+          <details class="nav-section">
+              <summary class="nav-title">Отдел настройки</summary>
+              <ul>
+                  <li><a href="/setup.html">Список бортов</a></li>
+                  <li><a href="/bpla.html">Прошивки и Дампы</a></li>
+              </ul>
+          </details>
+          <div class="nav-common">
+              <ul>
+                  <li><a href="/summary.html">Сводка</a></li>
+              </ul>
+          </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="user-info">
+        <div class="user-avatar">🦛</div>
+        <div class="user-details">
+            <span id="userName">Загрузка...</span>
+            <span id="userRole">Роль не задана</span>
+        </div>
+        </div>
+        <a href="#" id="logoutBtn" class="logout-button">Выйти</a>
     </div>
   </aside>
   <h1>Прошивки и дампы</h1>

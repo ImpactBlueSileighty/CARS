@@ -1,7 +1,7 @@
 const bcrypt = require('bcrypt');
 
 // ❗️ Впишите сюда пароль, который хотите захешировать
-const plainPassword = 'admin';
+const plainPassword = 'kachalin2025';
 
 // "Сложность" хэширования. 10 — стандартное и надёжное значение.
 const saltRounds = 10;

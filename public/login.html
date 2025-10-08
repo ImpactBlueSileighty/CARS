@@ -5,7 +5,14 @@
   <title>Вход в систему</title>
   <link rel="stylesheet" href="/style/main.css">
   <style>
-    body { display: flex; justify-content: center; align-items: center; height: 100vh; background-color: var(--bg); }
+    body { 
+        display: flex; 
+        justify-content: center; 
+        align-items: center; 
+        height: 100vh; 
+        background-color: var(--bg);
+        padding-left: 0; /* <-- ДОБАВЬТЕ ЭТУ СТРОКУ */
+    }
     .login-form { width: 350px; padding: 2rem; background: var(--white); border-radius: var(--radius); box-shadow: var(--shadow); }
     .login-form h2 { text-align: center; color: var(--primary); margin-bottom: 1.5rem; }
     .login-form input { width: 100%; padding: 10px; margin-bottom: 1rem; border: 1px solid #ccc; border-radius: 4px; }
