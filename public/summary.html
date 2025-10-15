@@ -7,48 +7,11 @@
 </head>
 <body>
 
-<aside class="sidebar">
-    <div class="sidebar-header">
-        <h2>ЦАРС</h2>
-    </div>
-
-    <nav class="sidebar-nav">
-        <details class="nav-section">
-            <summary class="nav-title">Слесарный цех</summary>
-            <ul>
-                <li><a href="/">Список бортов</a></li>
-            </ul>
-        </details>
-        <details class="nav-section">
-            <summary class="nav-title">Отдел настройки</summary>
-            <ul>
-                <li><a href="/setup.html">Список бортов</a></li>
-                <li><a href="/bpla.html">Прошивки и Дампы</a></li>
-            </ul>
-        </details>
-        <div class="nav-common">
-            <ul>
-                <li><a href="/summary.html">Сводка</a></li>
-            </ul>
-        </div>
-    </nav>
-
-    <div class="sidebar-footer">
-        <div class="user-info">
-        <div class="user-avatar">🦛</div>
-        <div class="user-details">
-            <span id="userName">Загрузка...</span>
-            <span id="userRole">Роль не задана</span>
-        </div>
-        </div>
-        <a href="#" id="logoutBtn" class="logout-button">Выйти</a>
-    </div>
-</aside>
+<div id="sidebar-placeholder"></div>
 
 <main class="content">
-    <h1>Общая сводка по бортам</h1>
-    <p class="subtitle">Статус готовности всех бортов в системе.</p>
 
+    <h1>Общая сводка по бортам <span id="summaryTitleDate"></span></h1>
     <div id="summaryStatisticsContainer" class="summary-stats-grid"></div>
 
     <details class="filter-box">
@@ -88,10 +51,20 @@
             <tbody id="summaryTableBody"></tbody>
         </table>
     </div>
+    <div id="avatar-picker-container"></div>
 </main>
 
 <script src="/js/main.js"></script>
 <script>
+
+async function setSummaryTitleDate() {
+    const dateElement = document.getElementById('summaryTitleDate');
+    if (dateElement) {
+        const today = new Date();
+        const options = { year: 'numeric', month: 'long', day: 'numeric' };
+        dateElement.textContent = `за ${today.toLocaleDateString('ru-RU', options)}`;
+    }
+}
 document.addEventListener("DOMContentLoaded", () => {
     const tableBody = document.getElementById('summaryTableBody');
     const statsContainer = document.getElementById('summaryStatisticsContainer');
@@ -232,10 +205,12 @@ document.addEventListener("DOMContentLoaded", () => {
         await loadSuppliers();
         await loadBplaTypes();
         await loadSummaryData();
+        await setSummaryTitleDate();
     };
 
     initPage();
 });
 </script>
+<script src="/js/include.js"></script>
 </body>
 </html>

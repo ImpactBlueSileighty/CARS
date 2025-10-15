@@ -1,10 +1,19 @@
+/* ==========================================================================
+   1. Базовые настройки и переменные
+   ========================================================================== */
 :root {
     --bg: #f5f6f7;
+    --white: #fff;
     --primary: #2c3e50;
     --accent: #1abc9c;
+    --accent-dark: #16a085;
+    --danger: #e74c3c;
+    --danger-dark: #c0392b;
     --text: #333;
-    --white: #fff;
-    --shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    --text-light: #6c757d;
+    --border-color: #e0e6ec;
+    --light-gray: #ecf0f1;
+    --shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
     --radius: 8px;
 }
 
@@ -14,10 +23,10 @@
 
 body {
     margin: 0;
-    font-family: 'Segoe UI', sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     background: var(--bg);
     color: var(--text);
-    padding-left: 240px; /* Отступ для сайдбара */
+    padding-left: 220px; /* Фиксированный отступ для сайдбара */
 }
 
 .content {
@@ -25,36 +34,125 @@ body {
 }
 
 h1 {
-    text-align: center;
     color: var(--primary);
+    margin-bottom: 2rem;
+    font-weight: 600;
+}
+.page-header {
+    display: flex;
+    justify-content: space-between; /* Разносит элементы по краям */
+    align-items: center; /* Выравнивает по центру по вертикали */
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border-color);
 }
 
-button {
-    padding: 10px 15px;
+.page-controls {
+    display: flex;          /* Превращаем контейнер в flex-контейнер */
+    align-items: center;    /* Выравниваем все дочерние элементы по центру по вертикали */
+    gap: 16px;              /* Добавляем аккуратный отступ между элементами */
+}
+
+.page-header h1 {
+    margin: 0; /* Убираем стандартный отступ у заголовка */
+    text-align: left;
+}
+
+#openModalBtn {
+    margin: 0; /* Убираем старые отступы у кнопки */
+}
+.subtitle {
+    text-align: center;
+    margin-top: -1.5rem;
+    margin-bottom: 2rem;
+    color: var(--text-light);
+}
+
+/* ==========================================================================
+   2. Общие компоненты (Кнопки, Формы, Таблицы)
+   ========================================================================== */
+
+/* --- Кнопки --- */
+button, .button {
+    padding: 10px 16px;
     background-color: var(--accent);
     border: none;
     border-radius: 6px;
     color: var(--white);
-    font-weight: bold;
+    font-weight: 600;
+    font-size: 0.95rem;
     cursor: pointer;
-    box-shadow: var(--shadow);
-    transition: background 0.2s ease;
+    transition: all 0.2s ease;
+}
+button:hover, .button:hover {
+    background-color: var(--accent-dark);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    transform: translateY(-1px);
+}
+.btn-secondary { background-color: var(--light-gray); color: var(--primary); }
+.btn-secondary:hover { background-color: #dce4e6; }
+.btn-danger { background-color: var(--danger); }
+.btn-danger:hover { background-color: var(--danger-dark); }
+
+/* --- Элементы форм --- */
+input[type="text"],
+input[type="password"],
+select,
+textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    font-family: inherit;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(26, 188, 156, 0.2);
+}
+label {
+    font-weight: 500;
+    font-size: 0.9rem;
+    color: var(--primary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
 }
 
-button:hover {
-    background-color: #17a689;
+/* --- Таблица --- */
+.table-container {
+    transform-origin: top left; 
+    width: 100%; 
 }
-
-#openModalBtn {
-    margin: 1rem auto 2rem;
-    display: block;
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
 }
+th, td {
+    padding: 12px 15px;
+    vertical-align: middle;
+    text-align: center;
+    white-space: nowrap;
+    border-bottom: 1px solid #f0f0f0;
+}
+th {
+    background: #f7f9fa;
+    font-weight: 600;
+    color: var(--primary);
+}
+tbody tr:hover { background-color: #f9fafb; }
 
-/* === Боковая панель (сайдбар) === */
+/* ==========================================================================
+   3. Макет (Сайдбар, Вкладки, Модальные окна)
+   ========================================================================== */
+
+/* --- Сайдбар --- */
 .sidebar {
     position: fixed;
-    left: 0;
-    top: 0;
+    left: 0; top: 0;
     width: 220px;
     height: 100vh;
     background-color: var(--white);
@@ -64,184 +162,83 @@ button:hover {
     z-index: 1001;
 }
 .sidebar-header {
-    padding: 1.5rem 1.5rem 1rem;
+    padding: 1rem; /* Уменьшаем отступы для компактности */
     border-bottom: 1px solid var(--border-color);
+    text-align: center; /* Центрируем логотип */
 }
-.sidebar-header h2 {
-    font-size: 1.5rem;
-    color: var(--primary);
-    font-weight: 600;
-    margin: 0;
-    text-align: center;
+.sidebar-logo {
+    max-width: 80%; /* Логотип будет занимать 80% ширины сайдбара */
+    height: auto; /* Высота подстроится автоматически */
 }
-.sidebar-nav {
-    flex-grow: 1;
-    padding: 1rem 0;
-}
-
-/* Стили для секций аккордеона */
-.nav-section {
-    border-bottom: 1px solid var(--border-color);
-}
-.nav-title {
-    display: block; /* Убираем стандартный маркер */
-    padding: 14px 24px;
-    font-weight: 600;
-    color: var(--primary);
-    cursor: pointer;
-    position: relative;
-    transition: background-color 0.2s;
-}
-.nav-title::-webkit-details-marker { display: none; } /* Убираем маркер в Chrome/Safari */
-.nav-title::after { /* Рисуем свою стрелку-шеврон */
-    content: '›';
-    position: absolute;
-    right: 20px;
-    top: 50%;
-    transform: translateY(-50%) rotate(90deg);
-    font-size: 1.5rem;
-    color: #aaa;
-    transition: transform 0.2s;
-}
-.nav-section[open] > .nav-title::after {
-    transform: translateY(-50%) rotate(-90deg); /* Анимация стрелки при открытии */
-}
-.nav-title:hover {
-    background-color: #f5f5f5;
+.sidebar-header h2 { font-size: 1.5rem; color: var(--primary); font-weight: 600; margin: 0; text-align: center; }
+.sidebar-nav { flex-grow: 1; padding: 1rem 0; }
+.nav-section { border-bottom: 1px solid var(--border-color); }
+.nav-title { display: flex; align-items: center; gap: 10px; padding: 14px 24px; font-weight: 600; color: var(--primary); cursor: pointer; position: relative; transition: background-color 0.2s; }
+.nav-title::-webkit-details-marker { display: none; }
+.nav-title::after { content: '›'; position: absolute; right: 20px; top: 50%; transform: translateY(-50%) rotate(90deg); font-size: 1.5rem; color: #aaa; transition: transform 0.2s; }
+.nav-section[open] > .nav-title::after { transform: translateY(-50%) rotate(-90deg); }
+.nav-title:hover { background-color: #f5f5f5; }
+.nav-common { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color); }
+.nav-common ul, .nav-section ul { list-style: none; padding: 0; margin: 0; }
+.nav-common a, .nav-section a { text-decoration: none; display: flex; align-items: center; gap: 10px; transition: all 0.2s ease; }
+.nav-common a { color: var(--primary); font-weight: 600; padding: 14px 24px; }
+.nav-section a { color: var(--text); font-weight: 500; padding: 12px 24px 12px 40px; }
+.nav-common a:hover, .nav-section a:hover { background-color: #f0fafa; color: var(--accent); }
+.nav-common a.active, .nav-section a.active { color: var(--accent); font-weight: bold; border-left: 3px solid var(--accent); background-color: #e8f8f5; }
+.nav-common a.active { padding-left: 21px; }
+.nav-section a.active { padding-left: 37px; }
+.sidebar-footer { padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); }
+.user-info { display: flex; align-items: center; gap: 12px; margin-bottom: 1rem; }
+.user-avatar { width: 48px; height: 48px; border-radius: 50%; object-fit: cover; border: 2px solid var(--border-color); cursor: pointer; transition: transform 0.2s; }
+.user-avatar:hover { transform: scale(1.1); }
+.avatar-picker-panel {
+    position: fixed; /* <-- ИЗМЕНИТЕ ЭТУ СТРОКУ */
+    z-index: 1002;
+    background: var(--white);
+    border-radius: var(--radius);
+    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+    padding: 10px;
+    
+    display: grid;
+    grid-template-columns: repeat(4, 50px);
+    gap: 10px;
 }
 
-.nav-common {
-    margin-top: 1rem;
-    padding-top: 1rem;
-    border-top: 1px solid var(--border-color); /* Разделительная линия */
-}
-
-.nav-common ul {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-}
-
-.nav-common a {
-    text-decoration: none;
-    color: var(--primary); /* Более заметный цвет */
-    font-weight: 600; /* Делаем жирнее */
-    display: block;
-    padding: 14px 24px;
-    transition: all 0.2s ease;
-}
-
-.nav-common a:hover {
-    background-color: #f5f5f5;
-    color: var(--accent);
-}
-
-/* Стиль для активной общей ссылки */
-.nav-common a.active {
-    color: var(--accent);
-    font-weight: bold;
-    border-left: 3px solid var(--accent);
-    background-color: #e8f8f5;
-    padding-left: 21px; /* Компенсируем border-left */
-}
-
-/* Стили для вложенного списка */
-.nav-section ul {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    background-color: #f9fafb;
-}
-.nav-section a {
-    text-decoration: none;
-    color: var(--text);
-    font-weight: 500;
-    display: block;
-    padding: 12px 24px 12px 40px; /* Добавляем отступ слева */
-    transition: all 0.2s ease;
-}
-.nav-section a:hover {
-    background-color: #f0fafa;
-    color: var(--accent);
-}
-.nav-section a.active {
-    color: var(--accent);
-    font-weight: bold;
-    border-left: 3px solid var(--accent);
-    background-color: #e8f8f5;
-    padding-left: 37px; /* Компенсируем border-left */
-}
-
-/* --- Стили для профиля в футере сайдбара --- */
-.sidebar-footer {
-    padding: 1rem 1.5rem;
-    border-top: 1px solid var(--border-color);
-}
-
-.user-info {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 1rem;
-}
-
-.user-avatar {
-    font-size: 2.2rem;
-    line-height: 1;
-    background-color: var(--light-gray);
-    padding: 8px;
+.avatar-option {
+    width: 50px;
+    height: 50px;
+    padding: 4px;
     border-radius: 50%;
-    color: var(--primary);
+    cursor: pointer;
+    transition: all 0.2s;
+    background-color: var(--light-gray);
 }
 
-.user-details {
-    display: flex;
-    flex-direction: column;
+.avatar-option:hover {
+    background-color: var(--accent);
+    transform: scale(1.1);
 }
 
-#userName {
-    font-weight: 600;
-    color: var(--primary);
-    font-size: 0.95rem;
-}
-
-#userRole {
-    font-size: 0.8rem;
-    color: var(--text-light);
-}
-
-.logout-button {
-    font-weight: 600;
-    background-color: var(--danger);
-}
-
-.logout-button:hover {
-    background-color: #c0392b;
-}
-
-.logout-button {
+.avatar-option img {
+    width: 100%;
+    height: 100%;
     display: block;
-    text-align: center;
-    padding: 8px;
-    background-color: var(--danger, #e74c3c); /* Явно задаем красный фон */
-    color: var(--white, #fff); /* Явно задаем белый цвет текста */
-    text-decoration: none;
-    border-radius: 6px; /* Используем стандартный радиус */
-    font-weight: 600;
-    transition: background-color 0.2s ease;
+    border-radius: 50%;
+    object-fit: cover;
 }
+.user-details { display: flex; flex-direction: column; }
+#userName { font-weight: 600; color: var(--primary); font-size: 0.95rem; }
+#userRole { font-size: 0.8rem; color: var(--text-light); }
+.logout-button { display: block; text-align: center; padding: 8px; background-color: var(--danger); color: white; text-decoration: none; border-radius: 6px; font-weight: 600; transition: background-color 0.2s ease; }
+.logout-button:hover { background-color: var(--danger-dark); }
 
-.logout-button:hover {
-    background-color: #c0392b; /* Более темный красный при наведении */
-}
-
-/* === Вкладки (Tabs) === */
+/* --- Вкладки (Tabs) --- */
 .tabs-container {
     margin-bottom: -1px;
     display: flex;
     gap: 8px;
     position: relative;
-    border-bottom: 1px solid #e0e0e0;
+    border-bottom: 1px solid var(--border-color);
 }
 .tab-btn {
     padding: 10px 20px;
@@ -264,333 +261,93 @@ button:hover {
     background-color: var(--white);
     color: var(--primary);
     font-weight: bold;
-    border-color: #e0e0e0;
+    border-color: var(--border-color);
     border-bottom: 1px solid var(--white);
     box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.04);
     opacity: 1;
 }
-
-/* === Вложенные вкладки (Sub-tabs) === */
 .sub-tabs-container {
-  margin: -1px 0 20px 0;
-  padding: 10px 12px;
-  background-color: #f0f3f5; /* Немного темнее основного фона */
-  border-radius: 0 0 8px 8px;
-  display: none; /* Скрыты по умолчанию */
-  gap: 10px;
-  box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
-  border-top: 1px solid #e0e6ec;
+    margin: -1px 0 20px 0;
+    padding: 10px 12px;
+    background-color: #f0f3f5;
+    border-radius: 0 0 8px 8px;
+    display: none;
+    gap: 10px;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
 }
-
 .sub-tab-btn {
-  padding: 6px 14px;
-  border: 1px solid transparent; /* Убираем рамку у неактивных */
-  background-color: transparent; /* Фон прозрачный */
-  color: var(--primary);
-  opacity: 0.7;
-  cursor: pointer;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 500;
-  transition: all 0.2s ease;
-}
-
-
-.sub-tab-btn:hover {
-  background-color: rgba(0,0,0,0.05);
-  opacity: 1;
-}
-
-.sub-tab-btn.active {
-  background-color: var(--accent);
-  color: var(--white);
-  border-color: var(--accent);
-  font-weight: 600;
-  opacity: 1;
-  box-shadow: 0 1px 3px rgba(26, 188, 156, 0.3);
-}
-
-
-/* === Блок статистики === */
-.statistics-container {
-    display: flex;
-    justify-content: center;
-    gap: 1.5rem;
-    padding: 1rem;
-    margin: 1rem 0 2rem 0;
-    background: var(--white);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    flex-wrap: wrap;
-}
-.stat-item {
-    text-align: center;
-    padding: 0.5rem 1rem;
-    border-right: 1px solid #eee;
-}
-.stat-item:last-child { border-right: none; }
-.stat-title {
-    font-size: 1rem;
-    font-weight: 600;
+    padding: 6px 14px;
+    border: 1px solid transparent;
+    background-color: transparent;
     color: var(--primary);
-    margin-bottom: 0.5rem;
-}
-.stat-values { font-size: 0.9rem; color: var(--text); }
-.stat-values span { display: block; margin-top: 4px; }
-.stat-values .finished { color: #27ae60; font-weight: bold; }
-.stat-values .semi-finished { color: #e67e22; }
-
-/* === Форма фильтрации === */
-.filter-box {
-  margin-bottom: 1.5rem;
-  background: var(--white);
-  padding: 1rem 1.5rem;
-  border-radius: 10px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
-}
-
-.filter-box summary {
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 1.1rem;
-  color: var(--primary);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.filter-form {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: flex-end;
-  gap: 1.5rem; /* Увеличим отступ между блоками */
-  margin-top: 1.5rem;
-}
-
-/* Основной контейнер с элементами управления */
-.filter-controls {
-  display: grid;
-  /* Адаптивная сетка: элементы переносятся при сужении экрана */
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 1rem 1.5rem;
-  align-items: end;
-  flex-grow: 1;
-}
-
-/* Стили для основных полей и дат */
-.primary-filters, .date-range {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.filter-form label {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-weight: 500;
-  font-size: 0.9rem;
-}
-
-.filter-form input[type="text"],
-.filter-form input[type="date"],
-.filter-form select {
-  width: 100%;
-  padding: 0.5rem 0.75rem; /* Увеличим отступы для удобства */
-  border: 1px solid #ccc;
-  border-radius: 6px;
-  font-size: 0.95rem;
-}
-
-/* Стили для группы чекбоксов */
-.checkbox-fieldset {
-  border: 1px solid #e0e0e0;
-  border-radius: var(--radius);
-  padding: 0.75rem 1rem;
-}
-.checkbox-fieldset legend {
-  font-weight: 600;
-  padding: 0 8px;
-  font-size: 0.9rem;
-  color: var(--primary);
-}
-.checkbox-group {
-  display: grid;
-  /* 3 колонки для компактности */
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.5rem 1rem;
-}
-
-/* Контейнер для кнопок */
-.filter-actions {
-  display: flex;
-  gap: 0.75rem;
-}
-.filter-form button {
-  padding: 0.6rem 1.25rem; 
-  border: none;
-  border-radius: 6px;
-  font-weight: 600;
-  font-size: 0.95rem;
-  cursor: pointer;
-  transition: background 0.2s, box-shadow 0.2s;
-}
-.filter-form button:hover {
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-}
-
-.filter-form button[type="button"] { background-color: #ecf0f1; color: #34495e; }
-.filter-form button[type="button"]:hover { background-color: #dce4e6; }
-.filter-form button#exportBtn { background-color: #16a085; color: #fff; }
-.filter-form button#exportBtn:hover { background-color: #117a65; }
-.filter-form button[type="submit"] { background-color: var(--accent); color: #fff; }
-.filter-form button[type="submit"]:hover { background-color: #17a689; }
-
-/* === Таблица === */
-.table-container {
-    width: 100%;
-    overflow-x: auto;
-    border: 1px solid #e0e0e0;
-    border-radius: var(--radius);
-    background: var(--white);
-}
-
-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.9rem;
-    display: table;
-}
-tbody tr {
-    /* Явно указываем, что это строка таблицы */
-    display: table-row;
-}
-th, td {
-    display: table-cell;
-    padding: 8px 10px;
-    vertical-align: middle;
-    text-align: center; 
-    white-space: nowrap;
-    border-bottom: 1px solid #eee;
-}
-th {
-    background: #f7f9fa;
-    font-weight: 600;
-}
-
-td:first-child {
-    padding: 4px; /* Уменьшаем отступы вокруг фото */
-}
-td:first-child img {
-    height: 40px;
-    width: 60px;
-    object-fit: cover; /* Гарантирует одинаковый размер, не искажая пропорции */
-    display: block;
-    margin: 0 auto;
-}
-
-td:nth-child(16) { 
-    white-space: normal;
-    min-width: 150px;
-    text-align: left;
-}
-.actions-cell button { padding: 5px 8px; font-size: 0.8rem; margin: 0 2px; }
-img { max-width: 60px; cursor: pointer; border-radius: 4px; transition: transform 0.2s; }
-img:hover { transform: scale(1.1); }
-
-/* ИНТЕРАКТИВНЫЕ ЯЧЕЙКИ В ТАБЛИЦЕ */
-.parameter-cell {
-    padding: 6px 8px;
-}
-.table-param-checkbox {
-    transform: scale(1.4);
+    opacity: 0.7;
     cursor: pointer;
-    margin: 0; 
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s ease;
 }
-.param-date-display {
-    font-size: 0.75rem;
-    color: #666;
-    min-height: 1em;
-    padding-top: 4px;
-    text-align: center;
+.sub-tab-btn:hover {
+    background-color: rgba(0,0,0,0.05);
+    opacity: 1;
 }
-
-/* === Модальное окно === */
-#addModal {
-  display: none; /* По умолчанию окно скрыто */
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(44, 62, 80, 0.7); /* фон из темы */
-  
-  /* Эти свойства сработают, когда JS установит display: flex */
-  justify-content: center;
-  align-items: center;
-  
-  z-index: 1000;
+.sub-tab-btn.active {
+    background-color: var(--accent);
+    color: var(--white);
+    font-weight: 600;
+    opacity: 1;
+    box-shadow: 0 1px 3px rgba(26, 188, 156, 0.3);
 }
 
-#addModal .modal-content {
+/* --- Модальные окна --- */
+#addModal, .comment-editor-modal {
+    display: none;
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(44, 62, 80, 0.7);
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    padding: 20px;
+}
+.modal-content, .comment-editor-content {
     background: var(--white);
     border-radius: var(--radius);
     box-shadow: 0 10px 25px rgba(0,0,0,0.2);
     width: 100%;
-    max-width: 500px; /* Чуть шире для удобства */
-    overflow: hidden;
-    
-    /* ГЛАВНОЕ ИЗМЕНЕНИЕ: Flex-контейнер и ограничение по высоте */
     display: flex;
     flex-direction: column;
-    max-height: 95vh; /* Окно не будет выше 95% высоты экрана */
 }
-
-#addModal h3 {
+.modal-content { max-width: 500px; max-height: 95vh; }
+.comment-editor-content { max-width: 400px; padding: 20px; }
+#addModal h3, .comment-editor-content h4 {
     padding: 16px 24px;
     margin: 0;
     background-color: #f7f9fa;
-    border-bottom: 1px solid #e0e0e0;
+    border-bottom: 1px solid var(--border-color);
     color: var(--primary);
-    flex-shrink: 0; /* Заголовок не сжимается */
+    flex-shrink: 0;
 }
-
+.comment-editor-content h4 { padding: 0 0 15px 0; background: none; border: none; }
 #addModal form {
-    /* ГЛАВНОЕ ИЗМЕНЕНИЕ: Включаем прокрутку */
-    overflow-y: auto; /* Появится скролл, если контент не влезет */
-    flex-grow: 1; /* Форма занимает все доступное место */
-
+    overflow-y: auto;
+    flex-grow: 1;
     padding: 20px 24px;
     display: flex;
     flex-direction: column;
-    gap: 14px; /* Уменьшаем отступы */
+    gap: 14px;
 }
-
 #addModal .form-grid {
     display: grid;
     grid-template-columns: auto 1fr;
     gap: 12px;
     align-items: center;
 }
-
-#addModal label { font-weight: 500; margin: 0; }
-
-#addModal input[type="text"],
-#addModal input[type="file"],
-#addModal select {
-    width: 100%;
-    padding: 8px 12px;
-    margin: 0;
-    border: 1px solid #ccc;
-    border-radius: 6px;
-}
-
-/* Более компактная группа параметров */
 .params-fieldset {
-    border: 1px solid #e0e0e0;
+    border: 1px solid var(--border-color);
     border-radius: var(--radius);
-    padding: 8px 16px 12px; /* Уменьшаем отступы */
+    padding: 8px 16px 12px;
     margin-top: 8px;
 }
 .params-fieldset legend { font-weight: 600; padding: 0 8px; color: var(--primary); }
@@ -598,313 +355,134 @@ img:hover { transform: scale(1.1); }
     display: grid;
     grid-template-columns: 1fr auto;
     align-items: center;
-    padding: 6px 0; /* Уменьшаем отступы */
+    padding: 6px 0;
     border-bottom: 1px dashed #eee;
 }
-.param-group:last-child { border-bottom: none; }
-.param-group label { display: flex; align-items: center; gap: 10px; font-size: 0.95rem; }
-.param-group input[type="checkbox"] { transform: scale(1.2); }
+.param-label {
+    display: flex;
+    align-items: center; /* Вертикальное выравнивание по центру */
+    width: 100%;
+}
 
+.param-name {
+    margin-left: 8px; /* Небольшой отступ от чекбокса */
+}
+
+.param-group:last-child { border-bottom: none; }
+.param-group label { font-size: 0.95rem; }
+.param-group input[type="checkbox"] { transform: scale(1.2); }
 .param-date-input {
-    width: 130px; /* Делаем поле даты еще компактнее */
+    /* --- Предыдущие стили --- */
+    margin-left: auto;
     padding: 4px 6px;
-    font-size: 0.9rem;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.2s ease-in-out;
+    height: 28px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 14px;
+    box-sizing: border-box;
+    vertical-align: middle;
+
+    /* --- НОВЫЕ СТИЛИ ДЛЯ РАЗМЕРА И ВЫРАВНИВАНИЯ ТЕКСТА --- */
+    width: 140px;          /* ✨ Задаем фиксированную ширину */
+    text-align: right;     /* ✨ Выравниваем текст внутри поля по правому краю */
+}
+.param-date-input::-webkit-calendar-picker-indicator {
+    padding-left: 4px;
+    cursor: pointer;
 }
 .param-date-input.visible { opacity: 1; pointer-events: auto; }
-
-/* Футер с кнопками */
 #addModal .actions {
     display: flex;
     justify-content: flex-end;
     gap: 12px;
     padding: 16px 24px;
-    border-top: 1px solid #e0e0e0;
+    border-top: 1px solid var(--border-color);
     background-color: #f7f9fa;
-    flex-shrink: 0; /* Футер не сжимается */
+    flex-shrink: 0;
 }
 #addModal .actions button { font-weight: 600; margin: 0; }
-.btn-primary { background-color: var(--accent); color: white; }
-.btn-primary:hover { background-color: #17a689; }
-.btn-secondary { background-color: #ecf0f1; color: #34495e; }
-.btn-secondary:hover { background-color: #dce4e6; }
 
-/* === Общие стили для форм === */
-select {
-    width: 100%;
-    padding: 8px 12px;
-    border: 1px solid #ccc;
-    border-radius: 6px;
-    font-size: 0.95rem;
-    background-color: var(--white);
-    color: var(--text);
-    appearance: none;
-    background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24'%3E%3Cpath fill='%23999' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 0.75rem center;
-    background-size: 16px auto;
-    cursor: pointer;
-}
-select:focus {
-    outline: none;
-    border-color: var(--accent);
-    box-shadow: 0 0 0 2px rgba(28, 184, 164, 0.2);
-}
+/* ==========================================================================
+   4. Стили для конкретных блоков и страниц
+   ========================================================================== */
 
-/* === Увеличенное изображение === */
-.zoom-img {
-    position: fixed;
-    top: 0; left: 0;
-    width: 100vw; height: 100vh;
-    background: rgba(0, 0, 0, 0.8);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1002; /* Выше сайдбара */
-}
-.zoom-img img {
-    max-width: 90%;
-    max-height: 90%;
-    border-radius: var(--radius);
-}
+/* --- Страница входа (Login) --- */
+body.login-page { padding-left: 0; }
+.login-container { display: flex; justify-content: center; align-items: center; width: 100%; min-height: 100vh; padding: 20px; background: var(--bg); }
+.login-form { width: 100%; max-width: 380px; padding: 2.5rem 2rem; background: var(--white); border-radius: var(--radius); box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1); border-top: 4px solid var(--accent); display: flex; flex-direction: column; gap: 1.25rem; }
+.login-form h2 { text-align: center; color: var(--primary); margin: 0 0 0.5rem 0; }
+.input-group { display: flex; flex-direction: column; gap: 0.5rem; }
+.remember-me { flex-direction: row; font-size: 0.9rem; color: #555; }
+.remember-me input { width: auto; transform: scale(1.1); }
+.remember-me label { font-weight: normal; color: var(--text); }
+#error-message { color: var(--danger); text-align: center; font-weight: 500; min-height: 1.2em; margin: 0; }
 
-.summary-grid {
-    display: grid;
-    /* Две колонки с автоматической шириной и отступом */
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 1.5rem;
-}
+/* --- Страница "Прошивки и Дампы" --- */
+.form-card, .result-card { max-width: 800px; margin: 2rem auto; background: var(--white); padding: 1.5rem 2rem; border-radius: var(--radius); box-shadow: var(--shadow); }
+.form-group { margin-bottom: 1rem; }
+.form-group:last-child { margin-bottom: 0; }
+.form-group label { display: block; margin-bottom: 0.5rem; font-weight: 500; }
+.result-card h3 { margin-top: 0; color: var(--primary); padding-bottom: 1rem; border-bottom: 1px solid var(--border-color); }
+.file-item { display: flex; justify-content: space-between; align-items: center; padding: 12px; background: #f9fafb; border: 1px solid var(--border-color); border-radius: 6px; margin-bottom: 10px; }
+.file-item a { color: var(--accent); text-decoration: none; font-weight: bold; display: flex; align-items: center; gap: 8px; }
+.file-item a:hover { color: var(--accent-dark); text-decoration: underline; }
+.versions-details { margin-top: 2rem; }
+.versions-details summary { cursor: pointer; font-weight: 600; font-size: 1.1rem; color: var(--primary); }
+.version-list { margin-top: 1rem; padding-left: 1rem; border-left: 2px solid var(--border-color); }
+.version-item { padding: 10px; background: #f9fafb; border-radius: 4px; margin-bottom: 8px; font-size: 0.9rem; display: flex; justify-content: space-between; align-items: center; }
+.version-item a { font-size: 0.9rem; }
 
-.summary-widget {
-    background: var(--white);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    padding: 20px 24px;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    border-left: 4px solid var(--accent); /* Цветная полоска слева */
-}
-
-.widget-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 1.1rem;
-    font-weight: 600;
-    color: var(--primary);
-    padding-bottom: 12px;
-    margin-bottom: 12px;
-    border-bottom: 1px solid #eee;
-}
-
-#summaryDate {
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    padding: 4px 8px;
-    font-family: inherit;
-    font-size: 0.9rem;
-    background-color: #f9f9f9;
-}
-
-.widget-value {
-    font-size: 3.5rem; /* Большой шрифт для цифр */
-    font-weight: 700;
-    color: var(--accent);
-    text-align: center;
-    line-height: 1.1;
-}
-
-.subtitle {
-    text-align: center;
-    margin-top: -1.5rem;
-    margin-bottom: 2rem;
-    color: var(--text-light);
-}
-
-.summary-stats-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 1rem;
-    margin-bottom: 2rem;
-}
-
-.stat-card {
-    background: var(--white);
-    border-radius: var(--radius);
-    padding: 1.25rem;
-    box-shadow: var(--shadow);
-}
-
-.stat-card-title {
-    font-weight: 600;
-    color: var(--primary);
-    font-size: 1.1rem;
-    margin-bottom: 1rem;
-}
-
-.stat-card-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 0.95rem;
-    padding: 0.5rem 0;
-    border-bottom: 1px solid #eee;
-}
-.stat-card-row:last-child {
-    border-bottom: none;
-}
-
-.stat-label::before {
-    content: '';
-    display: inline-block;
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    margin-right: 8px;
-}
-
+/* --- Страница "Сводка" --- */
+.summary-stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+.stat-card { background: var(--white); border-radius: var(--radius); padding: 1.25rem; box-shadow: var(--shadow); }
+.stat-card-title { font-weight: 600; color: var(--primary); font-size: 1.1rem; margin-bottom: 1rem; }
+.stat-card-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.95rem; padding: 0.5rem 0; border-bottom: 1px solid #eee; }
+.stat-card-row:last-child { border-bottom: none; }
+.stat-label::before { content: ''; display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; }
 .stat-label.green::before { background-color: #27ae60; }
-.stat-label.red::before { background-color: #e74c3c; }
+.stat-label.red::before { background-color: var(--danger); }
 .stat-label.orange::before { background-color: #e67e22; }
+.stat-value { font-weight: 700; font-size: 1.1rem; }
+.stat-value .stat-today { font-size: 0.9rem; font-weight: 600; color: var(--accent); margin-left: 8px; }
 
-.stat-value {
-    font-weight: 700;
-    font-size: 1.1rem;
+/* --- Блок Фильтров (общий) --- */
+.filter-box { margin-bottom: 1.5rem; background: #fff; padding: 1rem 1.5rem; border-radius: 10px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06); }
+.filter-box summary { cursor: pointer; font-weight: 600; font-size: 1.1rem; color: var(--primary); display: flex; align-items: center; gap: 8px; }
+.filter-form { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 1.5rem; margin-top: 1.5rem; }
+.filter-controls {
+    display: flex;
+    flex-wrap: wrap; /* Разрешаем перенос на маленьких экранах */
+    gap: 1.5rem;
+    align-items: flex-end; /* Выравниваем все блоки по нижнему краю */
+    flex-grow: 1;
 }
+.primary-filters {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    align-items: end;
+    flex: 2; /* Позволяем этому блоку занимать больше места */
+}
+.checkbox-fieldset {
+    flex: 3; /* Позволяем этому блоку занимать еще больше места */
+    align-self: stretch; /* Растягиваем по всей высоте */
+}
+.checkbox-fieldset legend { font-weight: 600; padding: 0 8px; font-size: 0.9rem; color: var(--primary); }
+.checkbox-group { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 0.5rem 1rem; }
+.filter-actions { display: flex; gap: 0.75rem; }
+.filter-form button { padding: 10px 20px; }
 
-/* Цвета для строк таблицы */
+/* --- Комментарии в таблице --- */
+.parameter-cell { position: relative; }
+.parameter-cell.has-comment { background-color: #fdeded; cursor: help; }
+.comment-indicator { position: absolute; top: 2px; left: 4px; font-size: 10px; color: #3498db; }
+.edit-comment-btn { position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; padding: 0; background: rgba(0, 0, 0, 0.05); border: none; border-radius: 50%; box-shadow: none; font-size: 14px; cursor: pointer; opacity: 0; transition: all 0.2s; display: flex; justify-content: center; align-items: center; line-height: 1; }
+.parameter-cell:hover .edit-comment-btn { opacity: 1; background: rgba(0, 0, 0, 0.1); }
+.edit-comment-btn:hover { background: var(--accent); color: white; transform: scale(1.1); }
+.comment-tooltip { position: fixed; background: #333; color: white; padding: 8px 12px; border-radius: 6px; font-size: 0.9rem; z-index: 1002; max-width: 300px; pointer-events: none; }
+.comment-editor-actions { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 15px; }
+
+/* --- Цвета для строк таблицы --- */
 tr.row-finished { background-color: #e8f8f5; }
 tr.row-in-progress-overdue { background-color: #fdeded; }
 tr.row-in-progress-today { background-color: #fef5e7; }
-
-.stat-value .stat-today {
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: var(--accent);
-    margin-left: 8px;
-}
-
-/* --- Стили для комментариев в таблице --- */
-.parameter-cell {
-    position: relative; /* Для позиционирования дочерних элементов */
-}
-
-/* Иконка-индикатор наличия комментария */
-.comment-indicator {
-    position: absolute;
-    top: 2px;
-    left: 4px;
-    font-size: 10px;
-    color: #3498db;
-}
-
-/* Кнопка редактирования, появляется при наведении */
-.edit-comment-btn {
-    position: absolute;
-    top: 4px;
-    right: 4px;
-    
-    /* Задаем жесткие размеры */
-    width: 24px;
-    height: 24px;
-    
-    padding: 0; /* Убираем лишние отступы */
-    background: rgba(0, 0, 0, 0.05); /* Легкий фон для заметности */
-    border: none;
-    border-radius: 50%; /* Делаем кнопку круглой */
-    box-shadow: none;
-    font-size: 14px;
-    cursor: pointer;
-    opacity: 0; /* По умолчанию скрыта */
-    transition: all 0.2s;
-
-    /* Центрируем иконку-эмодзи внутри кнопки */
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    line-height: 1;
-}
-
-/* Показываем кнопку при наведении на ячейку */
-.parameter-cell:hover .edit-comment-btn {
-    opacity: 1;
-    background: rgba(0, 0, 0, 0.1);
-}
-
-/* Подсвечиваем кнопку при наведении на нее саму */
-.edit-comment-btn:hover {
-    background: var(--accent);
-    color: white;
-    transform: scale(1.1);
-}
-
-/* Всплывающая подсказка (тултип) */
-.comment-tooltip {
-    position: fixed;
-    background: #333;
-    color: white;
-    padding: 8px 12px;
-    border-radius: 6px;
-    font-size: 0.9rem;
-    z-index: 1002;
-    max-width: 300px;
-    pointer-events: none; /* Чтобы не мешал наведению мыши */
-}
-
-/* Окно редактирования комментария */
-.comment-editor-modal {
-    position: fixed;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    background: rgba(0, 0, 0, 0.4);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 1001;
-}
-.comment-editor-content {
-    background: var(--white);
-    padding: 20px;
-    border-radius: var(--radius);
-    width: 90%;
-    max-width: 400px;
-    box-shadow: var(--shadow);
-}
-.comment-editor-content h4 {
-    margin-top: 0;
-}
-#commentTextarea {
-    width: 100%;
-    resize: vertical;
-}
-.comment-editor-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 10px;
-    margin-top: 10px;
-}
-
-.parameter-cell.has-comment {
-    background-color: #fdeded; /* Светло-красный фон */
-    cursor: help; /* Курсор в виде знака вопроса */
-}
-
-/* Обновленные стили для окна редактирования */
-.comment-editor-actions {
-    display: flex;
-    justify-content: space-between; /* Разносим кнопки по краям */
-    align-items: center;
-    gap: 10px;
-    margin-top: 15px;
-}
-
-/* Стиль для кнопки "Удалить" */
-.btn-danger {
-    background-color: var(--danger, #e74c3c);
-}
-.btn-danger:hover {
-    background-color: #c0392b;
-}

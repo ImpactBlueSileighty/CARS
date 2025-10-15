@@ -46,7 +46,7 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     req.session.cookie.maxAge = rememberMe ? 30 * 24 * 60 * 60 * 1000 : null;
-    req.session.user = { id: user.id, fullName: user.full_name, role: user.role };
+    req.session.user = { id: user.id, fullName: user.full_name, role: user.role, avatar: user.avatar };
 
     await pool.query('UPDATE users SET last_login_date = NOW() WHERE id = $1', [user.id]);
     res.json(req.session.user);
@@ -54,6 +54,46 @@ app.post('/api/auth/login', async (req, res) => {
     console.error('Login error:', err);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
+});
+
+app.put('/api/user/avatar', async (req, res) => {
+    if (!req.session.user) {
+        return res.status(401).json({ error: 'Требуется авторизация' });
+    }
+    const { avatar } = req.body;
+    const userId = req.session.user.id;
+
+    if (!avatar) {
+        return res.status(400).json({ error: 'Недопустимый аватар' });
+    }
+
+    // Проверяем, что такой файл действительно существует на сервере
+    const avatarPath = path.join(__dirname, 'public', 'avatars', avatar);
+    if (!fs.existsSync(avatarPath)) {
+        return res.status(400).json({ error: 'Выбранный аватар не существует' });
+    }
+
+    try {
+        await pool.query('UPDATE users SET avatar = $1 WHERE id = $2', [avatar, userId]);
+        req.session.user.avatar = avatar;
+        res.json({ success: true, avatar: avatar });
+    } catch (err) {
+        console.error('Ошибка обновления аватара:', err);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
+});
+
+app.get('/api/avatars', (req, res) => {
+    const avatarsPath = path.join(__dirname, 'public', 'avatars');
+    fs.readdir(avatarsPath, (err, files) => {
+        if (err) {
+            console.error("Не удалось прочитать папку с аватарами:", err);
+            return res.status(500).json({ error: 'Ошибка сервера' });
+        }
+        // Отправляем только файлы изображений
+        const imageFiles = files.filter(file => /\.(png|jpg|jpeg|svg|gif)$/i.test(file));
+        res.json(imageFiles);
+    });
 });
 
 // POST /api/auth/logout - Выход пользователя
@@ -88,8 +128,9 @@ const isAuthenticated = (req, res, next) => {
   res.redirect('/login.html');
 };
 
-app.use(isAuthenticated); // Все, что определено НИЖЕ, теперь защищено!
 app.use('/images', express.static(path.join(__dirname, 'images')));
+app.use(isAuthenticated); // Все, что определено НИЖЕ, теперь защищено!
+
 app.use('/firmwares', express.static(path.join(__dirname, 'firmwares')));
 app.use('/dumps', express.static(path.join(__dirname, 'dumps')));
 
@@ -175,9 +216,6 @@ function hasRole(roles) {
   };
 }
 const canUpload = hasRole(['Администратор', 'Начальник отдела испытания', 'Отдел испытаний']);
-
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
-
 app.get('/login.html', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
@@ -218,37 +256,37 @@ app.get('/api/board/:id', async (req, res) => {
 // Добавить новую запись с фото
 app.post('/api/add_board', async (req, res) => {
   try {
-    // Убираем finished_date из полей
-    const {
-      bpla_id, number, supplier_id, controller_id, description, photo_path, creation_date,
-      traction_date, angle_date, acceleration_date, osd_date, osd_configured_date, plugs_date, engine_start_date,
-      engine_installation_date, catapult_hooks_date, fuel_system_date, workshop_rods_date, lead_weight_date 
-    } = req.body;
+    // 1. Получаем только те данные, которые отправляет форма цеха
+    const { bpla_id, number, supplier_id, workshop_params } = req.body;
 
-    // Убираем finished_date из SQL-запроса
+    // 2. Проверяем, что номер борта не пустой
+    if (!number || number.trim() === '') {
+        return res.status(400).json({ error: 'Номер борта является обязательным полем.' });
+    }
+
+    // 3. Создаем новую, правильную SQL-команду для вставки данных
     const result = await pool.query(
-      `INSERT INTO boards (
-        bpla_id, number, supplier_id, controller_id, description, photo_path, creation_date,
-        traction_date, angle_date, acceleration_date, osd_date, osd_configured_date, plugs_date, engine_start_date,
-        engine_installation_date, catapult_hooks_date, fuel_system_date, workshop_rods_date, lead_weight_date
-      ) VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING *`, 
-      [
-        bpla_id, number, supplier_id, controller_id, description, photo_path,
-        traction_date, angle_date, acceleration_date, osd_date, osd_configured_date, plugs_date, engine_start_date,
-        engine_installation_date, catapult_hooks_date, fuel_system_date, workshop_rods_date, lead_weight_date
-      ]
+      `INSERT INTO boards (bpla_id, number, supplier_id, workshop_params, creation_date) 
+       VALUES ($1, $2, $3, $4, NOW()) 
+       RETURNING *`,
+      [bpla_id, number, supplier_id, workshop_params]
     );
 
     const newBoard = result.rows[0];
     const user = req.session.user;
-    logAction(user.id, 'CREATE_BOARD', `Добавлен борт №${newBoard.number}`);
+    // Логируем действие, если пользователь авторизован
+    if (user) {
+        logAction(user.id, 'CREATE_BOARD', `Добавлен борт №${newBoard.number} из цеха`);
+    }
     
     res.status(201).json(newBoard);
   } catch (err) {
-    console.error('Ошибка при добавлении борта:', err);
-    res.status(500).json({ error: 'Ошибка сервера' });
+    // Отправляем более информативную ошибку в консоль сервера для отладки
+    console.error('Ошибка при добавлении борта из цеха:', err);
+    res.status(500).json({ error: 'Ошибка сервера при сохранении борта.' });
   }
 });
+
 
 // Обновить
 app.put('/api/board/:id', async (req, res) => {
@@ -353,7 +391,7 @@ app.post('/api/boards/filter', async (req, res) => {
       if (engine_start) query += ` AND b.engine_start_date IS NOT NULL`;
   }
 
-  query += ' ORDER BY b.finished_date DESC';
+  query += " ORDER BY string_to_array(b.number, '.')::int[] ASC";
 
   try {
     const result = await pool.query(query, params);
@@ -401,26 +439,27 @@ app.get('/api/controllers', async (req, res) => {
   res.json(rows);
 });
 
-app.patch('/api/board/:id/parameter', async (req, res) => {
+app.patch('/api/workshop/:id/parameter', async (req, res) => {
     const { id } = req.params;
-    const { parameter, date } = req.body;
-    const allowedParameters = [
-        'traction_date', 'angle_date', 'acceleration_date', 'osd_date',
-        'osd_configured_date', 'plugs_date', 'engine_start_date'
-    ];
-    if (!allowedParameters.includes(parameter)) {
-        return res.status(400).json({ error: 'Недопустимый параметр' });
-    }
+    const { parameter, value } = req.body; // 'value' может быть датой или null
+
     try {
-        await pool.query(`UPDATE boards SET ${parameter} = $1 WHERE id = $2`, [date, id]);
+        // Используем функцию jsonb_set для обновления или добавления ключа в JSON-объекте
+        // COALESCE гарантирует, что если workshop_params пустой, он будет обработан как пустой JSON '{}'
+        await pool.query(
+            `UPDATE boards 
+             SET workshop_params = jsonb_set(COALESCE(workshop_params, '{}'::jsonb), $1, $2)
+             WHERE id = $3`,
+            [`{${parameter}}`, JSON.stringify(value), id]
+        );
 
-        // ВЫЗЫВАЕМ ПРОВЕРКУ ПОСЛЕ ОБНОВЛЕНИЯ
-        await checkAndUpdateFullReadiness(id);
-
-        logAction(req.session.user.id, 'UPDATE_PARAMETER', `Обновлен параметр '${parameter}' для борта с ID ${id}`);
+        // После каждого обновления запускаем проверку на полную готовность
+        await checkAndUpdateFullReadiness(id, req.session.user.id);
+        
+        logAction(req.session.user.id, 'UPDATE_WORKSHOP_PARAM', `Обновлен параметр цеха '${parameter}' для борта ID ${id}`);
         res.status(200).json({ message: 'Параметр обновлен' });
     } catch (err) {
-        console.error('Ошибка частичного обновления:', err);
+        console.error('Ошибка частичного обновления (цех):', err);
         res.status(500).json({ error: 'Ошибка сервера' });
     }
 });
@@ -675,44 +714,39 @@ app.get('/summary.html', isAuthenticated, (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'summary.html'));
 });
 
+// --- ОБНОВЛЕННЫЙ МАРШРУТ ДЛЯ СТАТИСТИКИ ---
 app.get('/api/summary/statistics', async (req, res) => {
     try {
         const query = `
+            WITH board_statuses AS (
+                SELECT
+                    b.bpla_id,
+                    b.finished_date,
+                    b.is_fully_finished,
+                    CASE
+                        WHEN b.is_fully_finished = TRUE THEN 'green'
+                        WHEN (
+                            -- ВАЖНО: Внимательно проверьте КАЖДОЕ имя столбца в этом блоке!
+                            -- Убедитесь, что они на 100% совпадают с вашей таблицей 'boards'.
+                            (b.workshop_comments->>'engine_installation_date' IS NOT NULL AND b.engine_installation_date IS NULL) OR
+                            (b.workshop_comments->>'catapult_hooks_date' IS NOT NULL AND b.catapult_hooks_date IS NULL) OR
+                            (b.workshop_comments->>'fuel_system_date' IS NOT NULL AND b.fuel_system_date IS NULL) OR
+                            (b.workshop_comments->>'workshop_rods_date' IS NOT NULL AND b.workshop_rods_date IS NULL) OR
+                            (b.workshop_comments->>'lead_weight_date' IS NOT NULL AND b.lead_weight_date IS NULL)
+                            -- Если у вас есть другие условия для "красного" статуса, добавьте их сюда
+                        ) THEN 'red'
+                        ELSE 'orange'
+                    END as status_color
+                FROM boards b
+            )
             SELECT 
                 bp.name as bpla_name,
-                
-                -- Зеленые (Готовые): те, у которых стоит флаг полной готовности
-                COUNT(*) FILTER (WHERE b.is_fully_finished = TRUE) as green,
-                
-                -- Готовые за сегодня
-                COUNT(*) FILTER (WHERE b.is_fully_finished = TRUE AND b.finished_date = CURRENT_DATE) as green_today,
-                
-                -- Красные (Полуфабрикаты): не готовые И имеют комментарий на параметре БЕЗ галочки
-                COUNT(*) FILTER (
-                    WHERE b.is_fully_finished = FALSE AND (
-                        (b.workshop_comments->>'engine_installation_date' IS NOT NULL AND b.engine_installation_date IS NULL) OR
-                        (b.workshop_comments->>'catapult_hooks_date' IS NOT NULL AND b.catapult_hooks_date IS NULL) OR
-                        (b.workshop_comments->>'fuel_system_date' IS NOT NULL AND b.fuel_system_date IS NULL) OR
-                        (b.workshop_comments->>'workshop_rods_date' IS NOT NULL AND b.workshop_rods_date IS NULL) OR
-                        (b.workshop_comments->>'lead_weight_date' IS NOT NULL AND b.lead_weight_date IS NULL)
-                        -- Примечание: здесь проверяются только комментарии цеха.
-                        -- Если комментарии появятся в отделе настройки, их нужно будет добавить сюда.
-                    )
-                ) as red,
-
-                -- Оранжевые (В работе): все остальные не готовые борты (которые не попали в красные)
-                COUNT(*) FILTER (
-                    WHERE b.is_fully_finished = FALSE AND NOT (
-                        (b.workshop_comments->>'engine_installation_date' IS NOT NULL AND b.engine_installation_date IS NULL) OR
-                        (b.workshop_comments->>'catapult_hooks_date' IS NOT NULL AND b.catapult_hooks_date IS NULL) OR
-                        (b.workshop_comments->>'fuel_system_date' IS NOT NULL AND b.fuel_system_date IS NULL) OR
-                        (b.workshop_comments->>'workshop_rods_date' IS NOT NULL AND b.workshop_rods_date IS NULL) OR
-                        (b.workshop_comments->>'lead_weight_date' IS NOT NULL AND b.lead_weight_date IS NULL)
-                    )
-                ) as orange
-                
-            FROM boards b
-            LEFT JOIN bpla bp ON b.bpla_id = bp.id
+                COUNT(bs.bpla_id) FILTER (WHERE bs.status_color = 'green') as green,
+                COUNT(bs.bpla_id) FILTER (WHERE bs.status_color = 'green' AND bs.finished_date = CURRENT_DATE) as green_today,
+                COUNT(bs.bpla_id) FILTER (WHERE bs.status_color = 'red') as red,
+                COUNT(bs.bpla_id) FILTER (WHERE bs.status_color = 'orange') as orange
+            FROM board_statuses bs
+            LEFT JOIN bpla bp ON bs.bpla_id = bp.id
             GROUP BY bp.name
             ORDER BY bp.name;
         `;
@@ -725,74 +759,60 @@ app.get('/api/summary/statistics', async (req, res) => {
 });
 
 
+// --- ОБНОВЛЕННЫЙ МАРШРУТ ДЛЯ ФИЛЬТРАЦИИ ---
 app.post('/api/summary/filter', async (req, res) => {
     const { number, supplier_id, bpla_id, status } = req.body;
 
+    // Тот же самый CTE, что и в статистике. Единый источник правды.
     let query = `
+        WITH board_statuses AS (
+            SELECT
+                b.*, 
+                s.name as supplier_name, 
+                bp.name as bpla_name,
+                CASE
+                    WHEN b.is_fully_finished = TRUE THEN 'green'
+                    WHEN (
+                        -- ВАЖНО: Этот блок должен быть ИДЕНТИЧЕН блоку в запросе статистики.
+                        (b.workshop_comments->>'engine_installation_date' IS NOT NULL AND b.engine_installation_date IS NULL) OR
+                        (b.workshop_comments->>'catapult_hooks_date' IS NOT NULL AND b.catapult_hooks_date IS NULL) OR
+                        (b.workshop_comments->>'fuel_system_date' IS NOT NULL AND b.fuel_system_date IS NULL) OR
+                        (b.workshop_comments->>'workshop_rods_date' IS NOT NULL AND b.workshop_rods_date IS NULL) OR
+                        (b.workshop_comments->>'lead_weight_date' IS NOT NULL AND b.lead_weight_date IS NULL)
+                    ) THEN 'red'
+                    ELSE 'orange'
+                END as status_color
+            FROM boards b
+            LEFT JOIN suppliers s ON b.supplier_id = s.id
+            LEFT JOIN bpla bp ON b.bpla_id = bp.id
+        )
         SELECT 
-            b.*, 
-            s.name as supplier_name, 
-            bp.name as bpla_name,
-            
-            -- Вычисляем статусы отделов для отображения в таблице
-            (b.engine_installation_date IS NOT NULL AND 
-             b.catapult_hooks_date IS NOT NULL AND 
-             b.fuel_system_date IS NOT NULL AND 
-             b.workshop_rods_date IS NOT NULL AND 
-             b.lead_weight_date IS NOT NULL) as workshop_complete,
-            (b.traction_date IS NOT NULL AND 
-             b.angle_date IS NOT NULL AND 
-             b.acceleration_date IS NOT NULL AND 
-             b.osd_date IS NOT NULL AND 
-             b.osd_configured_date IS NOT NULL AND 
-             b.plugs_date IS NOT NULL AND 
-             b.engine_start_date IS NOT NULL) as setup_complete,
-
-            -- ГЛАВНОЕ ИЗМЕНЕНИЕ: ВЫЧИСЛЯЕМ ЦВЕТОВОЙ СТАТУС ПРЯМО В ЗАПРОСЕ
-            CASE
-                WHEN b.is_fully_finished = TRUE THEN 'green'
-                WHEN (
-                    (b.workshop_comments->>'engine_installation_date' IS NOT NULL AND b.engine_installation_date IS NULL) OR
-                    (b.workshop_comments->>'catapult_hooks_date' IS NOT NULL AND b.catapult_hooks_date IS NULL) OR
-                    (b.workshop_comments->>'fuel_system_date' IS NOT NULL AND b.fuel_system_date IS NULL) OR
-                    (b.workshop_comments->>'workshop_rods_date' IS NOT NULL AND b.workshop_rods_date IS NULL) OR
-                    (b.workshop_comments->>'lead_weight_date' IS NOT NULL AND b.lead_weight_date IS NULL)
-                ) THEN 'red'
-                ELSE 'orange'
-            END as status_color
-            
-        FROM boards b
-        LEFT JOIN suppliers s ON b.supplier_id = s.id
-        LEFT JOIN bpla bp ON b.bpla_id = bp.id
-        WHERE TRUE`;
+            *,
+            -- Вычисляем статусы отделов (если они все еще нужны на фронтенде)
+            (engine_installation_date IS NOT NULL AND catapult_hooks_date IS NOT NULL AND fuel_system_date IS NOT NULL AND workshop_rods_date IS NOT NULL AND lead_weight_date IS NOT NULL) as workshop_complete,
+            (traction_date IS NOT NULL AND angle_date IS NOT NULL AND acceleration_date IS NOT NULL AND osd_date IS NOT NULL AND osd_configured_date IS NOT NULL AND plugs_date IS NOT NULL AND engine_start_date IS NOT NULL) as setup_complete
+        FROM board_statuses
+        WHERE TRUE
+    `;
     
     const params = [];
-    if (number) { params.push(`%${number.trim().toLowerCase()}%`); query += ` AND LOWER(TRIM(b.number)) ILIKE $${params.length}`; }
-    if (supplier_id) { params.push(supplier_id); query += ` AND b.supplier_id = $${params.length}`; }
-    if (bpla_id) { params.push(bpla_id); query += ` AND b.bpla_id = $${params.length}`; }
+    
+    if (number) { params.push(`%${number.trim().toLowerCase()}%`); query += ` AND LOWER(TRIM(number)) ILIKE $${params.length}`; }
+    if (supplier_id) { params.push(supplier_id); query += ` AND supplier_id = $${params.length}`; }
+    if (bpla_id) { params.push(bpla_id); query += ` AND bpla_id = $${params.length}`; }
 
-    // Фильтрация по статусу (цвету)
-    if (status === 'finished') {
-        query += ` AND b.is_fully_finished = TRUE`;
-    } else if (status === 'overdue') { // "Просрочено" - это наши "красные"
-        query += ` AND b.is_fully_finished = FALSE AND (
-            (b.workshop_comments->>'engine_installation_date' IS NOT NULL AND b.engine_installation_date IS NULL) OR
-            (b.workshop_comments->>'catapult_hooks_date' IS NOT NULL AND b.catapult_hooks_date IS NULL) OR
-            (b.workshop_comments->>'fuel_system_date' IS NOT NULL AND b.fuel_system_date IS NULL) OR
-            (b.workshop_comments->>'workshop_rods_date' IS NOT NULL AND b.workshop_rods_date IS NULL) OR
-            (b.workshop_comments->>'lead_weight_date' IS NOT NULL AND b.lead_weight_date IS NULL)
-        )`;
-    } else if (status === 'today') { // "В работе (сегодня)" - это наши "оранжевые"
-         query += ` AND b.is_fully_finished = FALSE AND b.creation_date = CURRENT_DATE AND NOT (
-            (b.workshop_comments->>'engine_installation_date' IS NOT NULL AND b.engine_installation_date IS NULL) OR
-            (b.workshop_comments->>'catapult_hooks_date' IS NOT NULL AND b.catapult_hooks_date IS NULL) OR
-            (b.workshop_comments->>'fuel_system_date' IS NOT NULL AND b.fuel_system_date IS NULL) OR
-            (b.workshop_comments->>'workshop_rods_date' IS NOT NULL AND b.workshop_rods_date IS NULL) OR
-            (b.workshop_comments->>'lead_weight_date' IS NOT NULL AND b.lead_weight_date IS NULL)
-        )`;
+    // Фильтрация по статусу стала гораздо проще и чище
+    if (status) {
+        if (status === 'finished') {
+            query += ` AND status_color = 'green'`;
+        } else if (status === 'overdue') {
+            query += ` AND status_color = 'red'`;
+        } else if (status === 'today') {
+            query += ` AND status_color = 'orange' AND creation_date = CURRENT_DATE`;
+        }
     }
     
-    query += ' ORDER BY b.is_fully_finished ASC, b.id DESC';
+    query += ' ORDER BY is_fully_finished ASC, id DESC';
 
     try {
         const result = await pool.query(query, params);
@@ -844,56 +864,31 @@ app.post('/api/workshop/:id/comment', async (req, res) => {
 
 app.put('/api/workshop/:id', async (req, res) => {
     const { id } = req.params;
-    const {
-        bpla_id,
-        number,
-        supplier_id,
-        engine_installation_date,
-        catapult_hooks_date,
-        fuel_system_date,
-        workshop_rods_date,
-        lead_weight_date
-    } = req.body;
-
+    const { number, supplier_id, workshop_params } = req.body;
     try {
         await pool.query(
-            `UPDATE boards SET 
-                bpla_id = $1, number = $2, supplier_id = $3,
-                engine_installation_date = $4, catapult_hooks_date = $5,
-                fuel_system_date = $6, workshop_rods_date = $7, lead_weight_date = $8
-             WHERE id = $9`,
-            [
-                bpla_id, number, supplier_id,
-                engine_installation_date, catapult_hooks_date, fuel_system_date,
-                workshop_rods_date, lead_weight_date,
-                id
-            ]
+            'UPDATE boards SET number = $1, supplier_id = $2, workshop_params = $3 WHERE id = $4',
+            [number, supplier_id, workshop_params, id]
         );
-        logAction(req.session.user.id, 'UPDATE_WORKSHOP_BOARD', `Обновлен борт №${number} из цеха`);
         res.sendStatus(200);
-    } catch (err) {
-        console.error('Ошибка при обновлении борта (цех):', err);
-        res.status(500).json({ error: 'Ошибка сервера' });
+    } catch (e) {
+        res.status(500).json({error: "Server error"});
     }
 });
 
+
 // Фильтрация для страницы "Слесарный цех"
 app.post('/api/workshop/filter', async (req, res) => {
-    const { number, supplier_id, engine_installation, catapult_hooks, fuel_system, rods, lead_weight } = req.body;
-
+    // 1. Явно извлекаем 'engines', чтобы он не попал в ...paramsFilters
+    const { bpla_id, number, supplier_id, engines, ...paramsFilters } = req.body; 
+    
     let query = `
-        SELECT 
-            b.id, b.number, s.name as supplier_name,
-            bp.name as bpla_name,
-            b.engine_installation_date, b.catapult_hooks_date,
-            b.fuel_system_date, b.workshop_rods_date, b.lead_weight_date,
-            b.workshop_comments
+        SELECT b.id, b.number, b.bpla_id, b.supplier_id, b.workshop_params, b.workshop_comments, s.name as supplier_name, bp.name as bpla_name
         FROM boards b
         LEFT JOIN suppliers s ON b.supplier_id = s.id
         LEFT JOIN bpla bp ON b.bpla_id = bp.id
-        WHERE TRUE`;
-    
-    const params = [];
+        WHERE b.bpla_id = $1`;
+    const params = [bpla_id];
 
     if (number) {
         params.push(`%${number.trim().toLowerCase()}%`);
@@ -904,20 +899,32 @@ app.post('/api/workshop/filter', async (req, res) => {
         query += ` AND b.supplier_id = $${params.length}`;
     }
 
-    if (engine_installation) query += ` AND b.engine_installation_date IS NOT NULL`;
-    if (catapult_hooks) query += ` AND b.catapult_hooks_date IS NOT NULL`;
-    if (fuel_system) query += ` AND b.fuel_system_date IS NOT NULL`;
-    if (rods) query += ` AND b.workshop_rods_date IS NOT NULL`;
-    if (lead_weight) query += ` AND b.lead_weight_date IS NOT NULL`;
+    // ✨=============== НАЧАЛО ИЗМЕНЕНИЙ ===============✨
+    // 2. Добавляем новый блок для фильтрации по двигателям
+    if (engines && engines.length > 0) {
+        params.push(engines);
+        // Используем синтаксис ->>'dvs' для извлечения текстового значения ключа 'dvs' из JSONB-поля
+        // и оператор = ANY($N::text[]) для безопасной проверки вхождения в массив в PostgreSQL
+        query += ` AND b.workshop_params->>'dvs' = ANY($${params.length}::text[])`;
+    }
+    // ✨================ КОНЕЦ ИЗМЕНЕНИЙ ================✨
 
-    query += ' ORDER BY b.id DESC';
+    // Динамически добавляем фильтры по остальным параметрам (чекбоксы)
+    for (const key in paramsFilters) {
+        if (paramsFilters[key] === true) {
+            // Проверяем, что ключ существует и его значение не null
+            query += ` AND b.workshop_params ->> '${key}' IS NOT NULL`;
+        }
+    }
+
+    query += ` ORDER BY ((string_to_array(b.number, '.'))[array_length(string_to_array(b.number, '.'), 1)])::integer ASC`;
 
     try {
-        const result = await pool.query(query, params);
-        res.json(result.rows);
-    } catch (err) {
-        console.error('Ошибка фильтрации (цех):', err);
-        res.status(500).json({ error: 'Ошибка фильтрации' });
+        const { rows } = await pool.query(query, params);
+        res.json(rows);
+    } catch (e) {
+        console.error("Ошибка фильтрации (цех):", e);
+        res.status(500).json({error: "Server error"});
     }
 });
 
@@ -949,6 +956,35 @@ app.patch('/api/workshop/:id/parameter', async (req, res) => {
     }
 });
 
+const workshopConfigs = {
+    '2': { 
+        params: { 'chassis': 'Шасси', 'tail_booms': 'Хвостовые балки', 'fuel_system': 'Топливная система', 'foam_gluing': 'Вклейка пены' },
+        engines: ['DLE55RA', 'DLE55', 'DLE60']
+    },
+    '3': { 
+        params: { 'tail_boom_assembly': 'Сборка хвост. балки', 'catapult_hooks': 'Зацепы катапульты', 'fuel_system': 'Топливная система', 'rods': 'Тяги' },
+        engines: ['NGH38']
+    },
+    '6': { 
+        params: { 'lead_weight': 'Свинцовый груз', 'catapult_hooks': 'Зацепы катапульты', 'fuel_system': 'Топливная система', 'rods': 'Тяги'},
+        engines: ['DLE 120', 'Stinger']
+    },
+    '5': {
+        params: { 'catapult_hooks': 'Зацепы катапульты', 'fuel_system': 'Топливная система', 'rods': 'Тяги', 'fairing': 'Обтекатель', 'parachute_compartment': 'Отсек под парашют', 'parachute_slings': 'Стропы парашюта'},
+        engines: ['Турбина Swiwin Turbojet']
+    }
+    // Добавьте сюда конфигурации для Дельта М и Дельта ТМ по их ID
+};
+
+app.get('/api/bpla/:id/workshop-config', (req, res) => {
+    const config = workshopConfigs[req.params.id];
+    if (config) {
+        res.json(config);
+    } else {
+        res.status(404).json({ error: 'Конфигурация для этого типа БПЛА не найдена' });
+    }
+});
+
 // GET /api/logs - Получение списка логов
 app.get('/api/logs', async (req, res) => {
   try {
@@ -969,33 +1005,26 @@ app.get('/api/logs', async (req, res) => {
 
 
 
-async function checkAndUpdateFullReadiness(boardId) {
+async function checkAndUpdateFullReadiness(boardId, userId) { // Теперь принимаем userId
     const allParams = [
         'traction_date', 'angle_date', 'acceleration_date', 'osd_date', 'osd_configured_date', 'plugs_date', 'engine_start_date',
         'engine_installation_date', 'catapult_hooks_date', 'fuel_system_date', 'workshop_rods_date', 'lead_weight_date'
     ];
-
     try {
         const { rows } = await pool.query('SELECT * FROM boards WHERE id = $1', [boardId]);
         if (rows.length === 0) return;
         const board = rows[0];
-
-        // Проверяем, все ли параметры теперь заполнены
         const isNowFullyFinished = allParams.every(param => board[param] !== null);
-
-        // Обновляем, только если статус действительно изменился
         if (board.is_fully_finished !== isNowFullyFinished) {
             if (isNowFullyFinished) {
-                // Если борт ТОЛЬКО ЧТО стал готовым, ставим флаг И ДАТУ
                 await pool.query(
-                    'UPDATE boards SET is_fully_finished = TRUE, finished_date = NOW() WHERE id = $1', 
+                    'UPDATE boards SET is_fully_finished = TRUE, finished_date = NOW() WHERE id = $1',
                     [boardId]
                 );
-                logAction(board.user_id, 'FINISH_BOARD', `Борт №${board.number} помечен как готовый`);
+                if (userId) logAction(userId, 'FINISH_BOARD', `Борт №${board.number} помечен как готовый`);
             } else {
-                // Если борт стал НЕ готовым (сняли галочку), сбрасываем флаг И ДАТУ
                 await pool.query(
-                    'UPDATE boards SET is_fully_finished = FALSE, finished_date = NULL WHERE id = $1', 
+                    'UPDATE boards SET is_fully_finished = FALSE, finished_date = NULL WHERE id = $1',
                     [boardId]
                 );
             }

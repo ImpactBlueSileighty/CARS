@@ -7,91 +7,27 @@
 </head>
 <body>
 
-<aside class="sidebar">
-    <div class="sidebar-header">
-        <h2>ЦАРС</h2>
-    </div>
-
-    <nav class="sidebar-nav">
-        <details class="nav-section">
-            <summary class="nav-title">Слесарный цех</summary>
-            <ul>
-                <li><a href="/">Список бортов</a></li>
-            </ul>
-        </details>
-        <details class="nav-section">
-            <summary class="nav-title">Отдел настройки</summary>
-            <ul>
-                <li><a href="/setup.html">Список бортов</a></li>
-                <li><a href="/bpla.html">Прошивки и Дампы</a></li>
-            </ul>
-        </details>
-        <div class="nav-common">
-            <ul>
-                <li><a href="/summary.html">Сводка</a></li>
-            </ul>
-        </div>
-    </nav>
-
-    <div class="sidebar-footer">
-        <div class="user-info">
-        <div class="user-avatar">🦛</div>
-        <div class="user-details">
-            <span id="userName">Загрузка...</span>
-            <span id="userRole">Роль не задана</span>
-        </div>
-        </div>
-        <a href="#" id="logoutBtn" class="logout-button">Выйти</a>
-    </div>
-</aside>
+<div id="sidebar-placeholder"></div>
 
 <main class="content">
-    <h1>Слесарный цех: Список бортов</h1>
-    
-    <button id="openModalBtn">➕ Добавить борт</button>
+    <div class="page-header">
+        <h1>Слесарный цех: Список бортов</h1>
+        <div class="page-controls">
+            <label>Тип БПЛА: <select id="bplaTypeSelector"></select></label>
+            <button id="openModalBtn">➕ Добавить борт</button>
+        </div>
+    </div>
 
-    <details class="filter-box">
+    <details class="filter-box" open>
         <summary>🔍 Фильтр и поиск</summary>
         <form id="filterForm" class="filter-form">
-            <div class="filter-controls">
-                <div class="primary-filters">
-                    <label>Номер борта: <input type="text" id="numberFilter" placeholder="Введите номер..." /></label>
-                    <label>Поставщик: <select id="supplierFilter"><option value="">Все</option></select></label>
-                </div>
-                <fieldset class="checkbox-fieldset">
-                    <legend>Параметры</legend>
-                    <div class="checkbox-group">
-                        <label><input type="checkbox" id="engineInstallationFilter" /> Установка ДВС</label>
-                        <label><input type="checkbox" id="catapultHooksFilter" /> Зацепы</label>
-                        <label><input type="checkbox" id="fuelSystemFilter" /> Топливная система</label>
-                        <label><input type="checkbox" id="rodsFilter" /> Тяги</label>
-                        <label><input type="checkbox" id="leadWeightFilter" /> Свинцовый груз</label>
-                    </div>
-                </fieldset>
-            </div>
-            <div class="filter-actions">
-                <button type="button" id="resetFilterBtn">Сбросить</button>
-                <button type="submit">Применить</button>
-            </div>
-        </form>
+            </form>
     </details>
 
     <div class="table-container">
-        <table>
-            <thead>
-                <tr>
-                    <th>Номер</th>
-                    <th>Тип борта</th>
-                    <th>Поставщик</th>
-                    <th>Установка ДВС</th>
-                    <th>Зацепы катапульты</th>
-                    <th>Топливная система</th>
-                    <th>Тяги</th>
-                    <th>Свинцовый груз</th>
-                    <th>Действия</th>
-                </tr>
-            </thead>
-            <tbody id="workshopTableBody"></tbody>
+        <table id="workshopTable">
+            <thead></thead>
+            <tbody></tbody>
         </table>
     </div>
 
@@ -101,35 +37,18 @@
             <form id="boardForm">
                 <div class="form-grid">
                     <label for="bplaId">Тип борта:</label>
-                    <select id="bplaId" required></select>
+                    <select id="bplaId" required>
+                        <option value="" disabled selected>-- Выберите тип борта --</option>
+                    </select>
                     <label for="number">Номер борта:</label>
-                    <input type="text" id="number" placeholder="Номер борта" required />
+                    <input type="text" id="number" required />
                     <label for="supplierId">Поставщик:</label>
-                    <select id="supplierId"></select>
+                    <select id="supplierId">
+                        <option value="" disabled selected>-- Выберите поставщика --</option>
+                    </select>
                 </div>
-                <fieldset class="params-fieldset">
-                    <legend>Параметры цеха</legend>
-                    <div class="param-group">
-                        <label><input type="checkbox" data-date-target="engine_installation_date" /> Установка ДВС</label>
-                        <input type="date" id="engine_installation_date" class="param-date-input" />
-                    </div>
-                    <div class="param-group">
-                        <label><input type="checkbox" data-date-target="catapult_hooks_date" /> Зацепы катапульты</label>
-                        <input type="date" id="catapult_hooks_date" class="param-date-input" />
-                    </div>
-                    <div class="param-group">
-                        <label><input type="checkbox" data-date-target="fuel_system_date" /> Топливная система</label>
-                        <input type="date" id="fuel_system_date" class="param-date-input" />
-                    </div>
-                    <div class="param-group">
-                        <label><input type="checkbox" data-date-target="workshop_rods_date" /> Тяги</label>
-                        <input type="date" id="workshop_rods_date" class="param-date-input" />
-                    </div>
-                    <div class="param-group">
-                        <label><input type="checkbox" data-date-target="lead_weight_date" /> Свинцовый груз</label>
-                        <input type="date" id="lead_weight_date" class="param-date-input" />
-                    </div>
-                </fieldset>
+                <fieldset id="paramsFieldset" class="params-fieldset">
+                    </fieldset>
                 <div class="actions">
                     <button type="button" id="closeModalBtn" class="btn-secondary">Отмена</button>
                     <button type="submit" class="btn-primary">Сохранить</button>
@@ -137,6 +56,7 @@
             </form>
         </div>
     </div>
+
     <div id="commentTooltip" class="comment-tooltip" style="display: none;"></div>
 
     <div id="commentModal" class="comment-editor-modal" style="display: none;">
@@ -144,357 +64,20 @@
             <h4>Комментарий к параметру: <span id="commentParamName"></span></h4>
             <textarea id="commentTextarea" rows="4" placeholder="Введите неисправность или заметку..."></textarea>
             <div class="comment-editor-actions">
-                <button id="deleteCommentBtn" class="btn-danger">Удалить</button>
+                <button type="button" id="deleteCommentBtn" class="btn-danger">Удалить</button>
                 <div>
-                    <button type="button" id="closeCommentModalBtn" class="btn-secondary">Закрыть</button>
+                    <button type="button" id="closeCommentModal" class="btn-secondary">Закрыть</button>
                     <button type="button" id="saveCommentBtn" class="btn-primary">Сохранить</button>
                 </div>
             </div>
         </div>
     </div>
+    
+    <div id="avatar-picker-container"></div>
 </main>
 
-<script src="/js/main.js"></script>
-<script>
-document.addEventListener("DOMContentLoaded", () => {
-    const tableBody = document.getElementById('workshopTableBody');
-    const modal = document.getElementById('addModal');
-    const form = document.getElementById('boardForm');
-    const openModalBtn = document.getElementById('openModalBtn');
-    const closeModalBtn = document.getElementById('closeModalBtn');
-    const tooltip = document.getElementById('commentTooltip');
-    const commentModal = document.getElementById('commentModal');
-    let editBoardId = null;
-
-    const workshopParams = ['engine_installation_date', 'catapult_hooks_date', 'fuel_system_date', 'workshop_rods_date', 'lead_weight_date'];
-
-
-    const loadBplaTypesForModal = async () => {
-        const select = document.getElementById('bplaId');
-        if (!select) return;
-        select.innerHTML = '';
-        try {
-            const res = await fetch('/api/bpla');
-            const bplaTypes = await res.json();
-            
-            // Добавляем только конечные типы (у которых нет дочерних)
-            const parentIds = new Set(bplaTypes.map(b => b.parent_id).filter(id => id !== null));
-            const filteredBplas = bplaTypes.filter(b => !parentIds.has(b.id));
-
-            filteredBplas.forEach(type => {
-                const option = document.createElement('option');
-                option.value = type.id;
-                option.textContent = type.name;
-                select.appendChild(option);
-            });
-        } catch(e) { console.error("Ошибка загрузки типов БПЛА"); }
-    };
-    // --- ФУНКЦИИ API ---
-    const getFilters = () => ({
-        number: document.getElementById('numberFilter').value.trim(),
-        supplier_id: document.getElementById('supplierFilter').value || null,
-        engine_installation: document.getElementById('engineInstallationFilter').checked,
-        catapult_hooks: document.getElementById('catapultHooksFilter').checked,
-        fuel_system: document.getElementById('fuelSystemFilter').checked,
-        rods: document.getElementById('workshopRodsFilter').checked,
-        lead_weight: document.getElementById('leadWeightFilter').checked,
-    });
-
-    const updateBoardParameter = async (boardId, parameter, date) => {
-        try {
-            const res = await fetch(`/api/workshop/${boardId}/parameter`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ parameter, date })
-            });
-            return res.ok;
-        } catch (error) {
-            console.error('Ошибка обновления (цех):', error);
-            return false;
-        }
-    };
-
-    const loadBoards = async () => {
-        try {
-            const res = await fetch('/api/workshop/filter', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(getFilters())
-            });
-            if (!res.ok) throw new Error('Ошибка сети');
-            renderTable(await res.json());
-        } catch (error) {
-            console.error('Ошибка загрузки данных (цех):', error);
-            tableBody.innerHTML = `<tr><td colspan="8" style="text-align: center;">Ошибка загрузки</td></tr>`;
-        }
-    };
-    
-    const loadSuppliers = async (selectElementId) => {
-        const select = document.getElementById(selectElementId);
-        if (!select) return;
-        try {
-            const res = await fetch('/api/suppliers');
-            const suppliers = await res.json();
-            // Очищаем, оставляя первый option (если он есть)
-            const firstOption = select.firstElementChild;
-            select.innerHTML = '';
-            if (firstOption) select.appendChild(firstOption);
-
-            suppliers.forEach(s => {
-                const option = document.createElement('option');
-                option.value = s.id;
-                option.textContent = s.name;
-                select.appendChild(option);
-            });
-        } catch(e) { console.error("Ошибка загрузки поставщиков"); }
-    };
-
-    // --- РЕНДЕРИНГ И UI ---
-    const renderTable = (boards) => {
-        tableBody.innerHTML = '';
-        if (!boards.length) {
-            tableBody.innerHTML = `<tr><td colspan="9" style="text-align: center;">Нет данных</td></tr>`;
-            return;
-        }
-        const formatDate = date => date ? new Date(date).toLocaleDateString('ru-RU') : '';
-        boards.forEach(board => {
-            const tr = document.createElement('tr');
-            let paramsHtml = '';
-            workshopParams.forEach(param => {
-                const hasDate = !!board[param];
-                const comment = board.workshop_comments ? board.workshop_comments[param] : null;
-                const hasCommentClass = comment ? 'has-comment' : '';
-
-                const headerIndex = workshopParams.indexOf(param) + 4;
-                const headerText = document.querySelector(`thead th:nth-child(${headerIndex})`).textContent;
-
-                paramsHtml += `
-                    <td class="parameter-cell ${hasCommentClass}" data-comment="${comment || ''}">
-                        ${comment ? '<span class="comment-indicator">💬</span>' : ''}
-                        <input type="checkbox" class="table-param-checkbox" 
-                               data-board-id="${board.id}" data-param-name="${param}" ${hasDate ? 'checked' : ''}>
-                        <div class="param-date-display">${formatDate(board[param])}</div>
-                        <button class="edit-comment-btn" data-board-id="${board.id}" data-param-name="${param}" data-param-label="${headerText}">✏️</button>
-                    </td>`;
-            });
-            tr.innerHTML = `
-                <td>${board.number}</td>
-                <td>${board.bpla_name || 'N/A'}</td>
-                <td>${board.supplier_name || 'N/A'}</td>
-                ${paramsHtml}
-                <td class="actions-cell">
-                    <button onclick="editBoard(${board.id})">✏️</button>
-                    <button onclick="deleteBoard(${board.id})">🗑️</button>
-                </td>
-            `;
-            tableBody.appendChild(tr);
-        });
-    };
-
-    // --- НОВАЯ ЛОГИКА ДЛЯ КОММЕНТАРИЕВ ---
-    function initCommentEditor() {
-    // Показываем/прячем тултип с комментарием
-        tableBody.addEventListener('mouseover', e => {
-            const cell = e.target.closest('.parameter-cell');
-            if (cell && cell.dataset.comment) {
-                tooltip.textContent = cell.dataset.comment;
-                tooltip.style.display = 'block';
-            }
-        });
-        tableBody.addEventListener('mousemove', e => {
-            tooltip.style.left = e.pageX + 15 + 'px';
-            tooltip.style.top = e.pageY + 15 + 'px';
-        });
-        tableBody.addEventListener('mouseout', () => {
-            tooltip.style.display = 'none';
-        });
-
-        let currentCommentData = {};
-
-        // Открываем окно редактирования комментария
-        tableBody.addEventListener('click', e => {
-            if (e.target.classList.contains('edit-comment-btn')) {
-                const button = e.target;
-                currentCommentData = {
-                    boardId: button.dataset.boardId,
-                    paramName: button.dataset.paramName,
-                };
-                document.getElementById('commentParamName').textContent = button.dataset.paramLabel;
-                const currentComment = button.closest('.parameter-cell').dataset.comment;
-                document.getElementById('commentTextarea').value = currentComment;
-                commentModal.style.display = 'flex';
-            }
-        });
-
-        // --- ИСПРАВЛЕННАЯ ЛОГИКА СОХРАНЕНИЯ/УДАЛЕНИЯ ---
-
-        // Единая функция для отправки данных на сервер
-        const saveComment = async (commentText) => {
-            try {
-                const res = await fetch(`/api/workshop/${currentCommentData.boardId}/comment`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        parameter: currentCommentData.paramName,
-                        comment: commentText
-                    })
-                });
-                if (!res.ok) throw new Error('Ошибка сохранения');
-                commentModal.style.display = 'none';
-                loadBoards(); // Перезагружаем таблицу для обновления
-            } catch (error) {
-                alert('Не удалось обработать комментарий.');
-                console.error(error);
-            }
-        };
-
-        // Привязываем события к кнопкам модального окна
-        document.getElementById('closeCommentModalBtn').onclick = () => commentModal.style.display = 'none';
-
-        document.getElementById('saveCommentBtn').onclick = () => {
-            const newComment = document.getElementById('commentTextarea').value;
-            saveComment(newComment);
-        };
-
-        document.getElementById('deleteCommentBtn').onclick = () => {
-            // Для удаления просто сохраняем пустую строку
-            saveComment('');
-        };
-    }
-
-
-    // --- CRUD ФУНКЦИИ ---
-    window.editBoard = async (id) => {
-        form.reset();
-        document.querySelectorAll('.param-date-input').forEach(input => input.classList.remove('visible'));
-        try {
-            const res = await fetch(`/api/board/${id}`);
-            if(!res.ok) throw new Error('Борт не найден');
-            const board = await res.json();
-            
-            document.getElementById('bplaId').value = board.bpla_id;
-            document.getElementById('number').value = board.number;
-            document.getElementById('supplierId').value = board.supplier_id || '';
-            
-
-            
-            const formatDateForInput = (date) => date ? new Date(date).toLocaleDateString('sv-SE') : '';
-            workshopParams.forEach(paramName => {
-                const checkbox = document.querySelector(`[data-date-target="${paramName}"]`);
-                const dateInput = document.getElementById(paramName);
-                if (checkbox && dateInput) {
-                    const hasDate = !!board[paramName];
-                    checkbox.checked = hasDate;
-                    if(hasDate) {
-                        dateInput.value = formatDateForInput(board[paramName]);
-                        dateInput.classList.add('visible');
-                    }
-                }
-            });
-            
-            editBoardId = id;
-            modal.style.display = 'flex';
-        } catch(e) {
-            alert('Не удалось загрузить данные борта для редактирования.');
-            console.error(e);
-        }
-    };
-
-    window.deleteBoard = async (id) => {
-        if (!confirm('Вы уверены, что хотите удалить борт?')) return;
-        await fetch(`/api/board/${id}`, { method: 'DELETE' });
-        loadBoards();
-    };
-
-    // --- ОБРАБОТЧИКИ СОБЫТИЙ ---
-    openModalBtn.onclick = () => {
-        form.reset();
-        document.querySelectorAll('.param-date-input').forEach(input => input.classList.remove('visible'));
-        editBoardId = null;
-        modal.style.display = 'flex';
-    };
-
-    closeModalBtn.onclick = () => { modal.style.display = 'none'; };
-    window.onclick = e => { if (e.target === modal) modal.style.display = 'none'; };
-
-    form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const body = {
-            bpla_id: document.getElementById('bplaId').value,
-            number: document.getElementById('number').value,
-            supplier_id: document.getElementById('supplierId').value || null,
-            engine_installation_date: document.getElementById('engine_installation_date').value || null,
-            catapult_hooks_date: document.getElementById('catapult_hooks_date').value || null,
-            fuel_system_date: document.getElementById('fuel_system_date').value || null,
-            workshop_rods_date: document.getElementById('workshop_rods_date').value || null,
-            lead_weight_date: document.getElementById('lead_weight_date').value || null,
-        };
-        
-        // При редактировании используем новый, специальный маршрут
-        const url = editBoardId ? `/api/workshop/${editBoardId}` : '/api/add_board';
-        const method = editBoardId ? 'PUT' : 'POST';
-
-        await fetch(url, {
-            method,
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-        });
-
-        modal.style.display = 'none';
-        loadBoards();
-    });
-    
-    document.getElementById('filterForm').addEventListener('submit', (e) => { e.preventDefault(); loadBoards(); });
-    document.getElementById('rodsFilter').id = 'workshopRodsFilter';
-    document.getElementById('resetFilterBtn').addEventListener('click', () => { document.getElementById('filterForm').reset(); loadBoards(); });
-
-    tableBody.addEventListener('change', async (e) => {
-        if (e.target.classList.contains('table-param-checkbox')) {
-            const checkbox = e.target;
-            const boardId = checkbox.dataset.boardId;
-            const paramName = checkbox.dataset.paramName;
-            const dateToSet = checkbox.checked ? new Date().toLocaleDateString('sv-SE') : null;
-            
-            checkbox.disabled = true;
-            const success = await updateBoardParameter(boardId, paramName, dateToSet);
-            checkbox.disabled = false;
-
-            if (success) {
-                checkbox.nextElementSibling.textContent = checkbox.checked ? new Date().toLocaleDateString('ru-RU') : '';
-            } else {
-                checkbox.checked = !checkbox.checked;
-                alert('Не удалось сохранить изменение.');
-            }
-        }
-    });
-
-    // --- ИНИЦИАЛИЗАЦИЯ СТРАНИЦЫ ---
-    const initPage = async() => {
-        const today = new Date().toLocaleDateString('sv-SE');
-        document.querySelectorAll('#addModal input[type="checkbox"][data-date-target]').forEach(checkbox => {
-            const dateInput = document.getElementById(checkbox.dataset.dateTarget);
-            if (dateInput) {
-                checkbox.addEventListener('change', () => {
-                    if (checkbox.checked) {
-                        dateInput.classList.add('visible');
-                        if (!dateInput.value) { dateInput.value = today; }
-                    } else {
-                        dateInput.classList.remove('visible');
-                        dateInput.value = '';
-                    }
-                });
-            }
-        });
-        await loadSuppliers('supplierFilter');
-        await loadSuppliers('supplierId');
-        await initCommentEditor();
-        await loadBplaTypesForModal(); 
-        await loadBoards();
-    };
-
-    initPage();
-});
-</script>
+<script src="/js/include.js"></script>
+<script src="/js/workshop.js"></script>
 
 </body>
 </html>

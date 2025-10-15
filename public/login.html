@@ -13,6 +13,12 @@
         background-color: var(--bg);
         padding-left: 0; /* <-- ДОБАВЬТЕ ЭТУ СТРОКУ */
     }
+    .login-logo {
+        display: block;
+        max-width: 200px; /* Можете изменить размер по своему вкусу */
+        height: auto;
+        margin: 0 auto 1.5rem; /* Центрируем и добавляем отступ снизу */
+    }
     .login-form { width: 350px; padding: 2rem; background: var(--white); border-radius: var(--radius); box-shadow: var(--shadow); }
     .login-form h2 { text-align: center; color: var(--primary); margin-bottom: 1.5rem; }
     .login-form input { width: 100%; padding: 10px; margin-bottom: 1rem; border: 1px solid #ccc; border-radius: 4px; }
@@ -23,7 +29,7 @@
 </head>
 <body>
   <div class="login-form">
-    <h2>Вход в ЦАРС</h2>
+    <img src="/images/cars_logo2.png" alt="Логотип ЦАРС" class="login-logo">
     <form id="loginForm">
       <input type="text" id="login" placeholder="Логин" required>
       <input type="password" id="password" placeholder="Пароль" required>

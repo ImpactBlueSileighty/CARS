@@ -7,43 +7,7 @@
 </head>
 <body>
 
-  <aside class="sidebar">
-      <div class="sidebar-header">
-          <h2>ЦАРС</h2>
-      </div>
-
-      <nav class="sidebar-nav">
-          <details class="nav-section">
-              <summary class="nav-title">Слесарный цех</summary>
-              <ul>
-                  <li><a href="/">Список бортов</a></li>
-              </ul>
-          </details>
-          <details class="nav-section">
-              <summary class="nav-title">Отдел настройки</summary>
-              <ul>
-                  <li><a href="/setup.html">Список бортов</a></li>
-                  <li><a href="/bpla.html">Прошивки и Дампы</a></li>
-              </ul>
-          </details>
-          <div class="nav-common">
-              <ul>
-                  <li><a href="/summary.html">Сводка</a></li>
-              </ul>
-          </div>
-      </nav>
-
-      <div class="sidebar-footer">
-          <div class="user-info">
-            <div class="user-avatar">🦛</div>
-            <div class="user-details">
-              <span id="userName">Загрузка...</span>
-              <span id="userRole">Роль не задана</span>
-            </div>
-          </div>
-          <a href="#" id="logoutBtn" class="logout-button">Выйти</a>
-      </div>
-  </aside>
+  <div id="sidebar-placeholder"></div>
 
 <main class="content">
   <h1>Отдел настройки. Список бортов</h1>
@@ -114,7 +78,6 @@
         <th>Свечи</th>
         <th>Обкатка</th>
         <th>Описание</th>
-        <th style="width: 110px;">Дата готовности</th>
         <th>Действия</th> </tr>
     </thead>
     <tbody id="boardTable"></tbody>
@@ -191,6 +154,7 @@
   <div id="zoomContainer" class="zoom-img" style="display: none;" onclick="this.style.display='none'">
     <img id="zoomedImg" src="" alt="Увеличено" />
   </div>
+  <div id="avatar-picker-container"></div>
 </main>
   <script>
   document.addEventListener("DOMContentLoaded", () => {
@@ -452,7 +416,6 @@
                 <td>${board.controller_name || 'N/A'}</td>
                 ${paramsHtml}
                 <td>${board.description || ''}</td>
-                <td>${formatDate(board.finished_date)}</td>
                 <td><button onclick="editBoard(${board.id})">✏️</button></td>
             `;
             tableBody.appendChild(tr);
@@ -676,5 +639,6 @@
   });
 </script>
 <script src="/js/main.js"></script>
+<script src="/js/include.js"></script>
 </body>
 </html>
