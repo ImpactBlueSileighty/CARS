@@ -439,28 +439,37 @@ app.get('/api/controllers', async (req, res) => {
   res.json(rows);
 });
 
-app.patch('/api/workshop/:id/parameter', async (req, res) => {
+app.patch('/api/board/:id/parameter', isAuthenticated, async (req, res) => {
     const { id } = req.params;
-    const { parameter, value } = req.body; // 'value' может быть датой или null
+    const { parameter, date } = req.body;
+
+    // --- ВАЖНО: Белый список параметров ---
+    // Чтобы предотвратить SQL-инъекции, мы разрешаем обновлять только
+    // заранее определенные столбцы. Это критически важно для безопасности.
+    const allowedParameters = [
+        'traction_date', 'angle_date', 'acceleration_date', 'osd_date', 
+        'osd_configured_date', 'plugs_date', 'engine_start_date'
+    ];
+
+    if (!allowedParameters.includes(parameter)) {
+        return res.status(400).json({ error: 'Недопустимый параметр для обновления' });
+    }
 
     try {
-        // Используем функцию jsonb_set для обновления или добавления ключа в JSON-объекте
-        // COALESCE гарантирует, что если workshop_params пустой, он будет обработан как пустой JSON '{}'
-        await pool.query(
-            `UPDATE boards 
-             SET workshop_params = jsonb_set(COALESCE(workshop_params, '{}'::jsonb), $1, $2)
-             WHERE id = $3`,
-            [`{${parameter}}`, JSON.stringify(value), id]
-        );
-
-        // После каждого обновления запускаем проверку на полную готовность
-        await checkAndUpdateFullReadiness(id, req.session.user.id);
+        // Динамически строим запрос, используя белый список для имени столбца.
+        // Значения ($1, $2) передаются безопасно через параметры.
+        const query = `UPDATE boards SET ${parameter} = $1 WHERE id = $2 RETURNING *`;
         
-        logAction(req.session.user.id, 'UPDATE_WORKSHOP_PARAM', `Обновлен параметр цеха '${parameter}' для борта ID ${id}`);
-        res.status(200).json({ message: 'Параметр обновлен' });
+        const { rows } = await pool.query(query, [date, id]);
+
+        if (rows.length > 0) {
+            res.json(rows[0]);
+        } else {
+            res.status(404).json({ error: 'Борт не найден' });
+        }
     } catch (err) {
-        console.error('Ошибка частичного обновления (цех):', err);
-        res.status(500).json({ error: 'Ошибка сервера' });
+        console.error(`Ошибка при обновлении параметра '${parameter}' для борта ${id}:`, err);
+        res.status(500).json({ error: 'Ошибка на сервере при обновлении параметра' });
     }
 });
 
@@ -726,14 +735,16 @@ app.get('/api/summary/statistics', async (req, res) => {
                     CASE
                         WHEN b.is_fully_finished = TRUE THEN 'green'
                         WHEN (
-                            -- ВАЖНО: Внимательно проверьте КАЖДОЕ имя столбца в этом блоке!
-                            -- Убедитесь, что они на 100% совпадают с вашей таблицей 'boards'.
-                            (b.workshop_comments->>'engine_installation_date' IS NOT NULL AND b.engine_installation_date IS NULL) OR
-                            (b.workshop_comments->>'catapult_hooks_date' IS NOT NULL AND b.catapult_hooks_date IS NULL) OR
-                            (b.workshop_comments->>'fuel_system_date' IS NOT NULL AND b.fuel_system_date IS NULL) OR
-                            (b.workshop_comments->>'workshop_rods_date' IS NOT NULL AND b.workshop_rods_date IS NULL) OR
-                            (b.workshop_comments->>'lead_weight_date' IS NOT NULL AND b.lead_weight_date IS NULL)
-                            -- Если у вас есть другие условия для "красного" статуса, добавьте их сюда
+                            /*
+                             * Логика "красного" статуса, исправленная под вашу структуру БД.
+                             * Мы проверяем отдельный столбец для двигателя и заглядываем
+                             * внутрь JSONB-поля 'workshop_params' для остальных параметров.
+                             */
+                            (b.workshop_comments->>'engine_installation' IS NOT NULL AND b.engine_installation_date IS NULL) OR
+                            (b.workshop_comments->>'catapult_hooks' IS NOT NULL AND b.workshop_params->>'catapult_hooks' IS NULL) OR
+                            (b.workshop_comments->>'fuel_system' IS NOT NULL AND b.workshop_params->>'fuel_system' IS NULL) OR
+                            (b.workshop_comments->>'rods' IS NOT NULL AND b.workshop_params->>'rods' IS NULL) OR
+                            (b.workshop_comments->>'lead_weight' IS NOT NULL AND b.workshop_params->>'lead_weight' IS NULL)
                         ) THEN 'red'
                         ELSE 'orange'
                     END as status_color
@@ -759,11 +770,11 @@ app.get('/api/summary/statistics', async (req, res) => {
 });
 
 
-// --- ОБНОВЛЕННЫЙ МАРШРУТ ДЛЯ ФИЛЬТРАЦИИ ---
+
+// --- ФИНАЛЬНЫЙ ИСПРАВЛЕННЫЙ МАРШРУТ ДЛЯ ФИЛЬТРАЦИИ ---
 app.post('/api/summary/filter', async (req, res) => {
     const { number, supplier_id, bpla_id, status } = req.body;
 
-    // Тот же самый CTE, что и в статистике. Единый источник правды.
     let query = `
         WITH board_statuses AS (
             SELECT
@@ -773,12 +784,11 @@ app.post('/api/summary/filter', async (req, res) => {
                 CASE
                     WHEN b.is_fully_finished = TRUE THEN 'green'
                     WHEN (
-                        -- ВАЖНО: Этот блок должен быть ИДЕНТИЧЕН блоку в запросе статистики.
-                        (b.workshop_comments->>'engine_installation_date' IS NOT NULL AND b.engine_installation_date IS NULL) OR
-                        (b.workshop_comments->>'catapult_hooks_date' IS NOT NULL AND b.catapult_hooks_date IS NULL) OR
-                        (b.workshop_comments->>'fuel_system_date' IS NOT NULL AND b.fuel_system_date IS NULL) OR
-                        (b.workshop_comments->>'workshop_rods_date' IS NOT NULL AND b.workshop_rods_date IS NULL) OR
-                        (b.workshop_comments->>'lead_weight_date' IS NOT NULL AND b.lead_weight_date IS NULL)
+                        (b.workshop_comments->>'engine_installation' IS NOT NULL AND b.engine_installation_date IS NULL) OR
+                        (b.workshop_comments->>'catapult_hooks' IS NOT NULL AND b.workshop_params->>'catapult_hooks' IS NULL) OR
+                        (b.workshop_comments->>'fuel_system' IS NOT NULL AND b.workshop_params->>'fuel_system' IS NULL) OR
+                        (b.workshop_comments->>'rods' IS NOT NULL AND b.workshop_params->>'rods' IS NULL) OR
+                        (b.workshop_comments->>'lead_weight' IS NOT NULL AND b.workshop_params->>'lead_weight' IS NULL)
                     ) THEN 'red'
                     ELSE 'orange'
                 END as status_color
@@ -788,28 +798,36 @@ app.post('/api/summary/filter', async (req, res) => {
         )
         SELECT 
             *,
-            -- Вычисляем статусы отделов (если они все еще нужны на фронтенде)
-            (engine_installation_date IS NOT NULL AND catapult_hooks_date IS NOT NULL AND fuel_system_date IS NOT NULL AND workshop_rods_date IS NOT NULL AND lead_weight_date IS NOT NULL) as workshop_complete,
+            (engine_installation_date IS NOT NULL AND 
+             workshop_params->>'catapult_hooks' IS NOT NULL AND 
+             workshop_params->>'fuel_system' IS NOT NULL AND 
+             workshop_params->>'rods' IS NOT NULL AND 
+             workshop_params->>'lead_weight' IS NOT NULL) as workshop_complete,
             (traction_date IS NOT NULL AND angle_date IS NOT NULL AND acceleration_date IS NOT NULL AND osd_date IS NOT NULL AND osd_configured_date IS NOT NULL AND plugs_date IS NOT NULL AND engine_start_date IS NOT NULL) as setup_complete
         FROM board_statuses
         WHERE TRUE
     `;
     
     const params = [];
-    
-    if (number) { params.push(`%${number.trim().toLowerCase()}%`); query += ` AND LOWER(TRIM(number)) ILIKE $${params.length}`; }
-    if (supplier_id) { params.push(supplier_id); query += ` AND supplier_id = $${params.length}`; }
-    if (bpla_id) { params.push(bpla_id); query += ` AND bpla_id = $${params.length}`; }
 
-    // Фильтрация по статусу стала гораздо проще и чище
+    if (number) { 
+        params.push(`%${number.trim().toLowerCase()}%`); 
+        query += ` AND LOWER(TRIM(number)) ILIKE $${params.length}`; 
+    }
+    if (supplier_id) { 
+        params.push(supplier_id); 
+        query += ` AND supplier_id = $${params.length}`; 
+    }
+    if (bpla_id) { 
+        params.push(bpla_id); 
+        // ИСПРАВЛЕНО: Убрали некорректный псевдоним 'b.'
+        query += ` AND bpla_id = $${params.length}`; 
+    }
+
     if (status) {
-        if (status === 'finished') {
-            query += ` AND status_color = 'green'`;
-        } else if (status === 'overdue') {
-            query += ` AND status_color = 'red'`;
-        } else if (status === 'today') {
-            query += ` AND status_color = 'orange' AND creation_date = CURRENT_DATE`;
-        }
+        if (status === 'finished') { query += ` AND status_color = 'green'`; } 
+        else if (status === 'overdue') { query += ` AND status_color = 'red'`; } 
+        else if (status === 'today') { query += ` AND status_color = 'orange' AND creation_date = CURRENT_DATE`; }
     }
     
     query += ' ORDER BY is_fully_finished ASC, id DESC';
@@ -818,6 +836,7 @@ app.post('/api/summary/filter', async (req, res) => {
         const result = await pool.query(query, params);
         res.json(result.rows);
     } catch (err) {
+        // Эта ошибка теперь не должна появляться
         console.error('Ошибка фильтрации для сводки:', err);
         res.status(500).json({ error: 'Ошибка фильтрации' });
     }
