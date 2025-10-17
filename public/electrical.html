@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Электромонтажный цех</title>
+    <link rel="stylesheet" href="/style/main.css">
+</head>
+<body>
+
+<div id="sidebar-placeholder"></div>
+    <main class="content">
+        <div class="page-header">
+            <h1>Электромонтажный цех</h1>
+            <div class="main-actions">
+                <label for="bplaTypeSelector">Тип БПЛА:</label>
+                <select id="bplaTypeSelector"></select>
+                <button id="openModalBtn">Добавить борт</button>
+            </div>
+        </div>
+
+        <details class="filter-box" open>
+            <summary>🔍 Фильтр и поиск</summary>
+            <form id="filterForm" class="filter-form"></form>
+        </details>
+
+        <div class="table-container">
+            <table id="electricalTable">
+                <thead>
+                    </thead>
+                <tbody>
+                    </tbody>
+            </table>
+        </div>
+    </main>
+
+    <div id="addModal" class="modal">
+        <div class="modal-content">
+            <h3>Добавление / Редактирование борта</h3>
+            <form id="boardForm">
+                <div class="form-grid">
+                    <label for="number">Номер борта:</label>
+                    <input type="text" id="number" required>
+
+                    <label for="supplierId">Поставщик:</label>
+                    <select id="supplierId">
+                        <option value="">-- Выберите поставщика --</option>
+                        </select>
+
+                    <label for="bplaId">Тип БПЛА:</label>
+                    <select id="bplaId">
+                        <option value="">-- Выберите тип --</option>
+                        </select>
+                </div>
+
+                <fieldset id="paramsFieldset">
+                    <legend>Компоненты</legend>
+                    </fieldset>
+            </form>
+            <div class="actions">
+                <button type="button" id="closeModalBtn" class="btn-secondary">Отмена</button>
+                <button type="submit" form="boardForm" id="saveBoardBtn">Сохранить</button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="/js/electrical.js"></script>
+    <script src="/js/include.js"></script>
+    <script src="/js/main.js"></script>
+</body>
+</html>

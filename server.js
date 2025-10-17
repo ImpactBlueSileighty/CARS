@@ -995,12 +995,144 @@ const workshopConfigs = {
     // Добавьте сюда конфигурации для Дельта М и Дельта ТМ по их ID
 };
 
+const electricalConfigs = {
+    // ID: 2, Имя: РТ-14
+    '2': {
+        params: ['telemetry_id', 'bec_id', 'gps_id', 'video_tx_id', 'pvd_id', 'seal_number']
+    },
+    // ID: 3, Имя: Альфа
+    '3': {
+        params: ['telemetry_id', 'bec_id', 'gps_id', 'video_tx_id', 'pvd_id']
+    },
+    // ID: 4, Имя: Дельта Мишень
+    '4': {
+        params: ['telemetry_id', 'bec_id', 'gps_id', 'video_tx_id']
+    },
+    // ID: 5, Имя: Дельта Универсальная
+    '5': {
+        params: ['telemetry_id', 'bec_id', 'gps_id', 'video_tx_id']
+    },
+    // ID: 6, Имя: Дельта Турбо
+    '6': {
+        params: ['telemetry_id', 'bec_id', 'gps_id', 'video_tx_id']
+    }
+};
+
+const electricalParamLabels = {
+    'telemetry_id': 'Модуль телеметрии',
+    'bec_id': 'BEC',
+    'gps_id': 'GPS модуль',
+    'video_tx_id': 'Видеопередатчик',
+    'pvd_id': 'ПВД',
+    'seal_number': 'Номер пломбы'
+};
+
+app.get('/api/bpla/:id/electrical-config', (req, res) => {
+    const bplaId = req.params.id;
+    const paramKeys = electricalConfigs[bplaId]?.params;
+    if (paramKeys) {
+        const params = paramKeys.reduce((obj, key) => {
+            obj[key] = electricalParamLabels[key] || key;
+            return obj;
+        }, {});
+        res.json({ params });
+    } else {
+        res.status(404).json({ error: 'Конфигурация не найдена' });
+    }
+});
+
+app.get('/api/electrical/components', async (req, res) => {
+    try {
+        // ИЗМЕНЕНИЕ ЗДЕСЬ: Запрос теперь идет в таблицу 'controller'
+        const [pcs, telemetries, becs, gps, video_txs, pvds] = await Promise.all([
+            pool.query('SELECT id, name AS model_name FROM controller ORDER BY name'),
+            pool.query('SELECT id, model_name FROM telemetry_modules ORDER BY model_name'),
+            pool.query('SELECT id, model_name FROM bec_modules ORDER BY model_name'),
+            pool.query('SELECT id, model_name FROM gps_modules ORDER BY model_name'),
+            pool.query('SELECT id, model_name FROM video_transmitters ORDER BY model_name'),
+            pool.query('SELECT id, model_name FROM pvd_modules ORDER BY model_name')
+        ]);
+        res.json({
+            controller: pcs.rows, // Ключ остается прежним для совместимости с фронтендом
+            telemetry_modules: telemetries.rows,
+            bec_modules: becs.rows,
+            gps_modules: gps.rows,
+            video_transmitters: video_txs.rows,
+            pvd_modules: pvds.rows
+        });
+    } catch (e) {
+        console.error("Ошибка загрузки компонентов электромонтажа:", e);
+        res.status(500).json({ error: "Ошибка сервера" });
+    }
+});
+
+// Фильтрация для таблицы электромонтажа
+app.post('/api/electrical/filter', async (req, res) => {
+    const { bpla_id, number, supplier_id, ...paramsFilters } = req.body;
+    
+    // Улучшенный JOIN, который не сломается, если pc_id отсутствует
+    let query = `
+        SELECT 
+            b.id, b.number, b.bpla_id, b.supplier_id, b.controller_id, 
+            b.electrical_params, 
+            s.name as supplier_name,
+            c.name as controller_name -- Получаем имя по основной связи
+        FROM boards b
+        LEFT JOIN suppliers s ON b.supplier_id = s.id
+        LEFT JOIN controller c ON b.controller_id = c.id
+        WHERE b.bpla_id = $1`;
+        
+    const params = [bpla_id];
+
+    if (number) {
+        params.push(`%${number.trim().toLowerCase()}%`);
+        query += ` AND LOWER(TRIM(b.number)) ILIKE $${params.length}`;
+    }
+    if (supplier_id) {
+        params.push(supplier_id);
+        query += ` AND b.supplier_id = $${params.length}`;
+    }
+
+    for (const key in paramsFilters) {
+        if (paramsFilters[key] === true) {
+            query += ` AND b.electrical_params ->> '${key}' IS NOT NULL`;
+        }
+    }
+    
+    query += ' ORDER BY b.id DESC';
+
+    try {
+        const { rows } = await pool.query(query, params);
+        res.json(rows);
+    } catch (e) {
+        console.error("Ошибка фильтрации (электромонтаж):", e);
+        res.status(500).json({error: "Server error"});
+    }
+});
+
 app.get('/api/bpla/:id/workshop-config', (req, res) => {
     const config = workshopConfigs[req.params.id];
     if (config) {
         res.json(config);
     } else {
         res.status(404).json({ error: 'Конфигурация для этого типа БПЛА не найдена' });
+    }
+});
+
+// Обновление/сохранение данных электромонтажа для борта
+app.put('/api/electrical/:id', async (req, res) => {
+    const { id } = req.params;
+    // ИСПРАВЛЕНИЕ: теперь принимаем controller_id отдельно
+    const { number, supplier_id, controller_id, electrical_params } = req.body;
+    try {
+        await pool.query(
+            'UPDATE boards SET number = $1, supplier_id = $2, controller_id = $3, electrical_params = $4 WHERE id = $5',
+            [number, supplier_id, controller_id, electrical_params, id]
+        );
+        res.sendStatus(200);
+    } catch (e) {
+        console.error("Ошибка обновления (электромонтаж):", e);
+        res.status(500).json({error: "Server error"});
     }
 });
 
@@ -1020,7 +1152,21 @@ app.get('/api/logs', async (req, res) => {
   }
 });
 
-
+app.get('/api/bpla/:bplaId/compatible-controllers', async (req, res) => {
+    const { bplaId } = req.params;
+    try {
+        const { rows } = await pool.query(`
+            SELECT c.id, c.name FROM controller c
+            JOIN bpla_controller bc ON c.id = bc.controller_id
+            WHERE bc.bpla_id = $1
+            ORDER BY c.name
+        `, [bplaId]);
+        res.json(rows);
+    } catch (e) {
+        console.error("Ошибка получения совместимых контроллеров:", e);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
+});
 
 
 
