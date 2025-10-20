@@ -14,7 +14,6 @@
             <div class="main-actions">
                 <label for="bplaTypeSelector">Тип БПЛА:</label>
                 <select id="bplaTypeSelector"></select>
-                <button id="openModalBtn">Добавить борт</button>
             </div>
         </div>
 
@@ -31,6 +30,7 @@
                     </tbody>
             </table>
         </div>
+        <div id="avatar-picker-container"></div>
     </main>
 
     <div id="addModal" class="modal">
@@ -44,17 +44,18 @@
                     <label for="supplierId">Поставщик:</label>
                     <select id="supplierId">
                         <option value="">-- Выберите поставщика --</option>
-                        </select>
+                    </select>
 
-                    <label for="bplaId">Тип БПЛА:</label>
-                    <select id="bplaId">
-                        <option value="">-- Выберите тип --</option>
-                        </select>
+                    <label>Тип БПЛА:</label>
+                    <div id="bplaTypeDisplay" style="padding: 10px 12px; font-weight: bold;"></div>
                 </div>
+
+                <div id="modalPcContainer"></div>
 
                 <fieldset id="paramsFieldset">
                     <legend>Компоненты</legend>
-                    </fieldset>
+                </fieldset>
+
             </form>
             <div class="actions">
                 <button type="button" id="closeModalBtn" class="btn-secondary">Отмена</button>

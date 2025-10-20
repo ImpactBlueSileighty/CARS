@@ -20,6 +20,15 @@ document.addEventListener("DOMContentLoaded", () => {
     const modalBplaSelector = document.getElementById('bplaId');
     const modalParamsFieldset = document.getElementById('paramsFieldset');
 
+
+    const ALL_POSSIBLE_PF_PARAMS = [
+        "Неисправность двигателя",
+        "Проблема с топливной системой",
+        "Повреждение корпуса",
+        "Ошибка электроники",
+        "Проблема с шасси"
+        // Добавьте сюда все нужные вам параметры
+    ];
     // --- 3. Функции для работы с API ---
 
     async function loadBplaTypes() {
@@ -183,6 +192,7 @@ document.addEventListener("DOMContentLoaded", () => {
         filterForm.onsubmit = (e) => e.preventDefault();
     }
 
+
     function renderTable(boards) {
         tableBody.innerHTML = '';
         const colspan = Object.keys(currentConfig.params).length + 4;
@@ -192,8 +202,22 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         const formatDate = (date) => date ? new Date(date).toLocaleDateString('ru-RU') : '';
         boards.forEach(board => {
-            const tr = document.createElement('tr');
-            const params = board.workshop_params || {};
+        const tr = document.createElement('tr');
+
+        // Добавляем класс, если борт - полуфабрикат
+        if (board.semi_finished_params && board.semi_finished_params.length > 0) {
+            tr.classList.add('is-semifinished');
+        }
+
+        // Формируем список параметров для отображения
+        let pfParamsHtml = '';
+        if (board.semi_finished_params && board.semi_finished_params.length > 0) {
+            pfParamsHtml = '<ul class="pf-params-list">';
+            board.semi_finished_params.forEach(p => {
+                pfParamsHtml += `<li>- ${p}</li>`;
+            });
+            pfParamsHtml += '</ul>';
+        }
             
             let paramsHtml = `<td>${params.dvs || 'N/A'}</td>`;
             for (const key in currentConfig.params) {
@@ -214,11 +238,18 @@ document.addEventListener("DOMContentLoaded", () => {
             
             tr.innerHTML = `
                 <td>${board.number}</td>
+                <td>${board.bpla_name || 'N/A'}</td>
                 <td>${board.supplier_name || 'N/A'}</td>
                 ${paramsHtml}
+                
+                <td>
+                    ${pfParamsHtml}
+                    <button class="add-pf-params-btn" data-board-id="${board.id}" title="Задать параметры ПФ">+</button>
+                </td>
+
                 <td class="actions-cell">
-                    <button onclick="window.editWorkshopBoard(${board.id})">✏️</button>
-                    <button onclick="window.deleteWorkshopBoard(${board.id})">🗑️</button>
+                    <button onclick="editBoard(${board.id})">✏️</button>
+                    <button onclick="deleteBoard(${board.id})">🗑️</button>
                 </td>
             `;
             tableBody.appendChild(tr);
@@ -450,6 +481,24 @@ document.addEventListener("DOMContentLoaded", () => {
             await onBplaTypeChange();
         }
 
+        // УЛУЧШЕННАЯ ЛОГИКА ОБРАБОТКИ ФИЛЬТРОВ
+        let filterDebounceTimer;
+        filterForm.addEventListener('input', (e) => {
+            clearTimeout(filterDebounceTimer);
+            filterDebounceTimer = setTimeout(() => {
+                loadAndRenderTable();
+            }, 400);
+        });
+
+        filterForm.addEventListener('click', (e) => {
+            if (e.target.id === 'resetFilterBtn') {
+                filterForm.reset();
+                loadAndRenderTable();
+            }
+        });
+        filterForm.addEventListener('submit', (e) => e.preventDefault());
+
+        // Обработчики модального окна
         modalBplaSelector.addEventListener('change', async (e) => {
             const bplaId = e.target.value;
             if (bplaId) {
@@ -465,31 +514,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 modalParamsFieldset.innerHTML = '<legend>Параметры</legend>';
             }
         });
-
-        modalParamsFieldset.addEventListener('change', (e) => {
-            if (e.target.classList.contains('param-checkbox')) {
-                const key = e.target.dataset.paramKey;
-                const dateInput = document.getElementById(`date_${key}`);
-                if (dateInput) {
-                    if (e.target.checked) {
-                        // Показываем поле
-                        dateInput.style.display = 'inline-block';
-                        // И ТОЛЬКО ЕСЛИ ОНО ПУСТОЕ, ставим сегодняшнюю дату
-                        if (!dateInput.value) {
-                            dateInput.value = new Date().toLocaleDateString('sv-SE');
-                        }
-                    } else {
-                        dateInput.style.display = 'none';
-                    }
-                }
-            }
-        });
-
+        
         openModalBtn.addEventListener('click', onOpenModal);
         closeModalBtn.addEventListener('click', () => modal.style.display = 'none');
         window.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
         form.addEventListener('submit', onFormSubmit);
-        initCommentEditor(); // Убедитесь, что эта функция вызывается, если она есть
+        
+        initCommentEditor();
     }
 
     init();

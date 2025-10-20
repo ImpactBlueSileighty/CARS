@@ -11,10 +11,11 @@
 
 <main class="content">
     <div class="page-header">
-        <h1>Слесарный цех: Список бортов</h1>
-        <div class="page-controls">
-            <label>Тип БПЛА: <select id="bplaTypeSelector"></select></label>
-            <button id="openModalBtn">➕ Добавить борт</button>
+        <h1>Слесарный цех</h1>
+        <div class="page-controls"> <label for="bplaTypeSelector">Тип БПЛА:</label>
+            <select id="bplaTypeSelector"></select>
+            
+            <button id="openModalBtn">Добавить борт</button>
         </div>
     </div>
 
@@ -31,29 +32,33 @@
         </table>
     </div>
 
-    <div id="addModal">
+    <div id="addModal" class="modal">
         <div class="modal-content">
-            <h3>Добавить/Изменить борт</h3>
+            <h3>Добавление / Редактирование борта</h3>
             <form id="boardForm">
                 <div class="form-grid">
-                    <label for="bplaId">Тип борта:</label>
-                    <select id="bplaId" required>
-                        <option value="" disabled selected>-- Выберите тип борта --</option>
-                    </select>
                     <label for="number">Номер борта:</label>
-                    <input type="text" id="number" required />
+                    <input type="text" id="number" required>
+
                     <label for="supplierId">Поставщик:</label>
                     <select id="supplierId">
-                        <option value="" disabled selected>-- Выберите поставщика --</option>
+                        <option value="">-- Выберите поставщика --</option>
+                    </select>
+
+                    <label for="bplaId">Тип БПЛА:</label>
+                    <select id="bplaId">
+                        <option value="">-- Выберите тип --</option>
                     </select>
                 </div>
+
                 <fieldset id="paramsFieldset" class="params-fieldset">
+                    <legend>Параметры</legend>
                     </fieldset>
-                <div class="actions">
-                    <button type="button" id="closeModalBtn" class="btn-secondary">Отмена</button>
-                    <button type="submit" class="btn-primary">Сохранить</button>
-                </div>
             </form>
+            <div class="actions">
+                <button type="button" id="closeModalBtn" class="btn-secondary">Отмена</button>
+                <button type="submit" form="boardForm" id="saveBoardBtn">Сохранить</button>
+            </div>
         </div>
     </div>
 
@@ -72,7 +77,17 @@
             </div>
         </div>
     </div>
-    
+    <div id="pfParamsModal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h3>Указать проблемные параметры</h3>
+            <div id="pfParamsChecklist" class="params-checklist">
+                </div>
+            <div class="actions">
+                <button type="button" id="closePfModalBtn" class="btn-secondary">Отмена</button>
+                <button type="button" id="savePfParamsBtn" class="btn-primary">Сохранить</button>
+            </div>
+        </div>
+    </div>
     <div id="avatar-picker-container"></div>
 </main>
 

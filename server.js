@@ -256,33 +256,31 @@ app.get('/api/board/:id', async (req, res) => {
 // Добавить новую запись с фото
 app.post('/api/add_board', async (req, res) => {
   try {
-    // 1. Получаем только те данные, которые отправляет форма цеха
-    const { bpla_id, number, supplier_id, workshop_params } = req.body;
+    // 1. Принимаем все возможные параметры
+    const { bpla_id, number, supplier_id, controller_id, workshop_params, electrical_params } = req.body;
 
-    // 2. Проверяем, что номер борта не пустой
     if (!number || number.trim() === '') {
         return res.status(400).json({ error: 'Номер борта является обязательным полем.' });
     }
-
-    // 3. Создаем новую, правильную SQL-команду для вставки данных
+    
+    // 2. Универсальная SQL-команда для вставки
     const result = await pool.query(
-      `INSERT INTO boards (bpla_id, number, supplier_id, workshop_params, creation_date) 
-       VALUES ($1, $2, $3, $4, NOW()) 
+      `INSERT INTO boards (bpla_id, number, supplier_id, controller_id, workshop_params, electrical_params, creation_date) 
+       VALUES ($1, $2, $3, $4, $5, $6, NOW()) 
        RETURNING *`,
-      [bpla_id, number, supplier_id, workshop_params]
+      // Если какой-то параметр не пришел, он вставится как NULL
+      [bpla_id, number, supplier_id, controller_id || null, workshop_params || null, electrical_params || null]
     );
 
     const newBoard = result.rows[0];
     const user = req.session.user;
-    // Логируем действие, если пользователь авторизован
     if (user) {
-        logAction(user.id, 'CREATE_BOARD', `Добавлен борт №${newBoard.number} из цеха`);
+        logAction(user.id, 'CREATE_BOARD', `Добавлен борт №${newBoard.number}`);
     }
     
     res.status(201).json(newBoard);
   } catch (err) {
-    // Отправляем более информативную ошибку в консоль сервера для отладки
-    console.error('Ошибка при добавлении борта из цеха:', err);
+    console.error('Ошибка при добавлении борта:', err);
     res.status(500).json({ error: 'Ошибка сервера при сохранении борта.' });
   }
 });
@@ -950,27 +948,29 @@ app.post('/api/workshop/filter', async (req, res) => {
 // Обновление одного параметра (галочки) для таблицы "Слесарный цех"
 app.patch('/api/workshop/:id/parameter', async (req, res) => {
     const { id } = req.params;
-    const { parameter, date } = req.body;
+    const { parameter, value } = req.body; // Принимаем 'value', а не 'date'
 
-    const allowedParameters = [
-        'engine_installation_date', 'catapult_hooks_date', 'fuel_system_date',
-        'workshop_rods_date', 'lead_weight_date'
-    ];
-
-    if (!allowedParameters.includes(parameter)) {
-        return res.status(400).json({ error: 'Недопустимый параметр' });
+    // Проверка, что параметр вообще передан
+    if (!parameter) {
+        return res.status(400).json({ error: 'Имя параметра не указано' });
     }
 
     try {
-        await pool.query(`UPDATE boards SET ${parameter} = $1 WHERE id = $2`, [date, id]);
-        
-        // После каждого обновления, запускаем проверку на полную готовность
-        await checkAndUpdateFullReadiness(id);
+        // Используем функцию jsonb_set для атомарного обновления ключа в JSON-объекте.
+        // COALESCE гарантирует, что если workshop_params равен NULL, он будет обработан как пустой JSON '{}'
+        const query = `
+            UPDATE boards
+            SET workshop_params = jsonb_set(COALESCE(workshop_params, '{}'::jsonb), $1, $2)
+            WHERE id = $3
+        `;
+
+        // '{parameter}' - это путь в JSON, а JSON.stringify(value) - это значение, которое мы вставляем.
+        await pool.query(query, [`{${parameter}}`, JSON.stringify(value), id]);
 
         logAction(req.session.user.id, 'UPDATE_WORKSHOP_PARAM', `Обновлен параметр цеха '${parameter}' для борта ID ${id}`);
         res.status(200).json({ message: 'Параметр обновлен' });
     } catch (err) {
-        console.error('Ошибка обновления (цех):', err);
+        console.error('Ошибка частичного обновления (цех):', err);
         res.status(500).json({ error: 'Ошибка сервера' });
     }
 });
@@ -984,6 +984,10 @@ const workshopConfigs = {
         params: { 'tail_boom_assembly': 'Сборка хвост. балки', 'catapult_hooks': 'Зацепы катапульты', 'fuel_system': 'Топливная система', 'rods': 'Тяги' },
         engines: ['NGH38']
     },
+    '4': { 
+        params: { 'lead_weight': 'Свинцовый груз', 'catapult_hooks': 'Зацепы катапульты', 'fuel_system': 'Топливная система', 'rods': 'Тяги'},
+        engines: ['DLE 120', 'Stinger'] // Предполагаем те же двигатели, что у Дельта Турбо. Измените, если нужно.
+    },
     '6': { 
         params: { 'lead_weight': 'Свинцовый груз', 'catapult_hooks': 'Зацепы катапульты', 'fuel_system': 'Топливная система', 'rods': 'Тяги'},
         engines: ['DLE 120', 'Stinger']
@@ -996,35 +1000,16 @@ const workshopConfigs = {
 };
 
 const electricalConfigs = {
-    // ID: 2, Имя: РТ-14
-    '2': {
-        params: ['telemetry_id', 'bec_id', 'gps_id', 'video_tx_id', 'pvd_id', 'seal_number']
-    },
-    // ID: 3, Имя: Альфа
-    '3': {
-        params: ['telemetry_id', 'bec_id', 'gps_id', 'video_tx_id', 'pvd_id']
-    },
-    // ID: 4, Имя: Дельта Мишень
-    '4': {
-        params: ['telemetry_id', 'bec_id', 'gps_id', 'video_tx_id']
-    },
-    // ID: 5, Имя: Дельта Универсальная
-    '5': {
-        params: ['telemetry_id', 'bec_id', 'gps_id', 'video_tx_id']
-    },
-    // ID: 6, Имя: Дельта Турбо
-    '6': {
-        params: ['telemetry_id', 'bec_id', 'gps_id', 'video_tx_id']
-    }
+    '2': { params: ['telemetry_id', 'bec_id', 'gps_id', 'video_tx_id', 'pvd_id', 'seal_number'] },
+    '3': { params: ['telemetry_id', 'bec_id', 'gps_id', 'video_tx_id', 'pvd_id'] },
+    '4': { params: ['telemetry_id', 'bec_id', 'gps_id', 'video_tx_id'] },
+    '5': { params: ['telemetry_id', 'bec_id', 'gps_id', 'video_tx_id'] },
+    '6': { params: ['telemetry_id', 'bec_id', 'gps_id', 'video_tx_id'] }
 };
 
 const electricalParamLabels = {
-    'telemetry_id': 'Модуль телеметрии',
-    'bec_id': 'BEC',
-    'gps_id': 'GPS модуль',
-    'video_tx_id': 'Видеопередатчик',
-    'pvd_id': 'ПВД',
-    'seal_number': 'Номер пломбы'
+    'telemetry_id': 'Модуль телеметрии', 'bec_id': 'BEC', 'gps_id': 'GPS модуль',
+    'video_tx_id': 'Видеопередатчик', 'pvd_id': 'ПВД', 'seal_number': 'Номер пломбы'
 };
 
 app.get('/api/bpla/:id/electrical-config', (req, res) => {
@@ -1041,28 +1026,48 @@ app.get('/api/bpla/:id/electrical-config', (req, res) => {
     }
 });
 
-app.get('/api/electrical/components', async (req, res) => {
+app.get('/api/bpla/:bplaId/compatible-controllers', async (req, res) => {
+    const { bplaId } = req.params;
     try {
-        // ИЗМЕНЕНИЕ ЗДЕСЬ: Запрос теперь идет в таблицу 'controller'
-        const [pcs, telemetries, becs, gps, video_txs, pvds] = await Promise.all([
-            pool.query('SELECT id, name AS model_name FROM controller ORDER BY name'),
-            pool.query('SELECT id, model_name FROM telemetry_modules ORDER BY model_name'),
-            pool.query('SELECT id, model_name FROM bec_modules ORDER BY model_name'),
-            pool.query('SELECT id, model_name FROM gps_modules ORDER BY model_name'),
-            pool.query('SELECT id, model_name FROM video_transmitters ORDER BY model_name'),
-            pool.query('SELECT id, model_name FROM pvd_modules ORDER BY model_name')
+        const { rows } = await pool.query(`
+            SELECT c.id, c.name FROM controller c
+            JOIN bpla_controller bc ON c.id = bc.controller_id
+            WHERE bc.bpla_id = $1 ORDER BY c.name
+        `, [bplaId]);
+        res.json(rows);
+    } catch (e) {
+        console.error("Ошибка получения совместимых контроллеров:", e);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
+});
+
+app.get('/api/electrical/components/:bplaId', async (req, res) => {
+    const { bplaId } = req.params;
+    const createQuery = (componentTable, compatTable, componentFk, componentPk = 'id') => {
+        const sql = `
+            SELECT t1.${componentPk}, t1.model_name FROM public.${componentTable} t1
+            JOIN public.${compatTable} t2 ON t1.${componentPk} = t2.${componentFk}
+            WHERE t2.bpla_id = $1 ORDER BY t1.model_name`;
+        return pool.query(sql, [bplaId]);
+    };
+    try {
+        const [telemetries, becs, gps, video_txs, pvds] = await Promise.all([
+            createQuery('telemetry_modules', 'bpla_telemetry_compatibility', 'telemetry_module_id'),
+            createQuery('bec_modules', 'bpla_bec_compatibility', 'bec_module_id'),
+            createQuery('gps_modules', 'bpla_gps_compatibility', 'gps_module_id'),
+            createQuery('video_transmitters', 'bpla_video_tx_compatibility', 'video_transmitter_id'),
+            createQuery('pvd_modules', 'bpla_pvd_compatibility', 'pvd_module_id')
         ]);
         res.json({
-            controller: pcs.rows, // Ключ остается прежним для совместимости с фронтендом
             telemetry_modules: telemetries.rows,
-            bec_modules: becs.rows,
-            gps_modules: gps.rows,
+            bec_models: becs.rows,
+            gps_models: gps.rows,
             video_transmitters: video_txs.rows,
-            pvd_modules: pvds.rows
+            pvd_models: pvds.rows
         });
     } catch (e) {
-        console.error("Ошибка загрузки компонентов электромонтажа:", e);
-        res.status(500).json({ error: "Ошибка сервера" });
+        console.error("Ошибка загрузки компонентов электромонтажа из БД:", e);
+        res.status(500).json({ error: "Ошибка на сервере" });
     }
 });
 
@@ -1070,13 +1075,8 @@ app.get('/api/electrical/components', async (req, res) => {
 app.post('/api/electrical/filter', async (req, res) => {
     const { bpla_id, number, supplier_id, ...paramsFilters } = req.body;
     
-    // Улучшенный JOIN, который не сломается, если pc_id отсутствует
     let query = `
-        SELECT 
-            b.id, b.number, b.bpla_id, b.supplier_id, b.controller_id, 
-            b.electrical_params, 
-            s.name as supplier_name,
-            c.name as controller_name -- Получаем имя по основной связи
+        SELECT b.id, b.number, b.bpla_id, b.supplier_id, b.controller_id, b.electrical_params, s.name as supplier_name, c.name as controller_name
         FROM boards b
         LEFT JOIN suppliers s ON b.supplier_id = s.id
         LEFT JOIN controller c ON b.controller_id = c.id
@@ -1093,9 +1093,11 @@ app.post('/api/electrical/filter', async (req, res) => {
         query += ` AND b.supplier_id = $${params.length}`;
     }
 
+    // ИЗМЕНЕНИЕ: Добавляем проверку не только на NULL, но и на пустую строку
     for (const key in paramsFilters) {
         if (paramsFilters[key] === true) {
-            query += ` AND b.electrical_params ->> '${key}' IS NOT NULL`;
+            // Эта проверка теперь отсеет и отсутствующие ключи, и ключи с null, и ключи с ""
+            query += ` AND b.electrical_params->>'${key}' IS NOT NULL AND b.electrical_params->>'${key}' != ''`;
         }
     }
     
@@ -1110,19 +1112,8 @@ app.post('/api/electrical/filter', async (req, res) => {
     }
 });
 
-app.get('/api/bpla/:id/workshop-config', (req, res) => {
-    const config = workshopConfigs[req.params.id];
-    if (config) {
-        res.json(config);
-    } else {
-        res.status(404).json({ error: 'Конфигурация для этого типа БПЛА не найдена' });
-    }
-});
-
-// Обновление/сохранение данных электромонтажа для борта
 app.put('/api/electrical/:id', async (req, res) => {
     const { id } = req.params;
-    // ИСПРАВЛЕНИЕ: теперь принимаем controller_id отдельно
     const { number, supplier_id, controller_id, electrical_params } = req.body;
     try {
         await pool.query(
@@ -1134,6 +1125,45 @@ app.put('/api/electrical/:id', async (req, res) => {
         console.error("Ошибка обновления (электромонтаж):", e);
         res.status(500).json({error: "Server error"});
     }
+});
+
+
+app.get('/api/bpla/:id/workshop-config', (req, res) => {
+    const config = workshopConfigs[req.params.id];
+    if (config) {
+        res.json(config);
+    } else {
+        res.status(404).json({ error: 'Конфигурация для этого типа БПЛА не найдена' });
+    }
+});
+
+
+app.patch('/api/board/:id/semifinished', async (req, res) => {
+  const { id } = req.params;
+  const { params } = req.body; // Ожидаем массив строк, например ["Неисправность 1", "Проблема с питанием"]
+
+  // Простая валидация
+  if (!Array.isArray(params)) {
+    return res.status(400).json({ error: 'Параметры должны быть массивом.' });
+  }
+
+  try {
+    // Если массив пустой, записываем NULL, иначе - сам массив в JSON
+    const paramsToSave = params.length > 0 ? JSON.stringify(params) : null;
+    
+    await pool.query(
+      'UPDATE boards SET semi_finished_params = $1 WHERE id = $2',
+      [paramsToSave, id]
+    );
+
+    const user = req.session.user;
+    logAction(user.id, 'UPDATE_SEMI_FINISHED', `Обновлены параметры ПФ для борта ID ${id}`);
+    
+    res.status(200).json({ message: 'Параметры ПФ обновлены' });
+  } catch (err) {
+    console.error('Ошибка обновления параметров ПФ:', err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
 });
 
 // GET /api/logs - Получение списка логов

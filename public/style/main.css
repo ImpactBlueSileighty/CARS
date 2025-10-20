@@ -320,6 +320,16 @@ tbody tr:hover { background-color: #f9fafb; }
     flex-direction: column;
 }
 .modal-content { max-width: 500px; max-height: 95vh; }
+.modal-overlay {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
 .comment-editor-content { max-width: 400px; padding: 20px; }
 #addModal h3, .comment-editor-content h4 {
     padding: 16px 24px;
@@ -486,3 +496,43 @@ body.login-page { padding-left: 0; }
 tr.row-finished { background-color: #e8f8f5; }
 tr.row-in-progress-overdue { background-color: #fdeded; }
 tr.row-in-progress-today { background-color: #fef5e7; }
+
+/* Стиль для строки-полуфабриката */
+tr.is-semifinished {
+    background-color: #ffe0e0 !important; /* Светло-красный фон */
+}
+
+/* Кнопка добавления параметров ПФ */
+.add-pf-params-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1.5rem;
+    padding: 0 5px;
+    color: #3498db;
+}
+.add-pf-params-btn:hover {
+    color: #2980b9;
+}
+
+/* Список параметров в ячейке */
+.pf-params-list {
+    font-size: 0.8rem;
+    color: #c0392b;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    text-align: left;
+}
+
+.params-checklist {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 20px 0;
+    max-height: 300px;
+    overflow-y: auto;
+}
+.params-checklist label {
+    display: block;
+}
