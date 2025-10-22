@@ -412,9 +412,86 @@ tbody tr:hover { background-color: #f9fafb; }
 }
 #addModal .actions button { font-weight: 600; margin: 0; }
 
+/* --- Улучшенный дизайн модального окна комментария --- */
+.modal-sm {
+    max-width: 450px; /* Оптимальная ширина для небольшого окна */
+}
+
+.modal-header {
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border-color);
+    background-color: #f7f9fa;
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 1.2rem;
+    color: var(--primary);
+}
+
+.modal-header h4 {
+    margin: 4px 0 0;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-light);
+}
+
+.modal-body {
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px; /* Расстояние между элементами */
+}
+
+.modal-body textarea {
+    resize: vertical; /* Разрешаем менять размер только по вертикали */
+}
+
+.modal-hint {
+    font-size: 0.8rem;
+    color: var(--text-light);
+    margin: -10px 0 0;
+    text-align: center;
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: space-between; /* Разносит элементы по краям */
+    align-items: center;
+    padding: 16px 24px;
+    border-top: 1px solid var(--border-color);
+    background-color: #f7f9fa;
+}
+
+.actions-right {
+    display: flex;
+    gap: 12px; /* Расстояние между кнопками справа */
+}
+
+/* Новый стиль для "незаметной" деструктивной кнопки */
+.btn-danger-outline {
+    background-color: transparent;
+    color: var(--danger);
+    border: 1px solid var(--danger);
+    padding: 9px 16px;
+}
+
+.btn-danger-outline:hover {
+    background-color: var(--danger);
+    color: var(--white);
+    border-color: var(--danger);
+}
+
+
+
+
 /* ==========================================================================
    4. Стили для конкретных блоков и страниц
    ========================================================================== */
+
+
+
+
 
 /* --- Страница входа (Login) --- */
 body.login-page { padding-left: 0; }
@@ -499,40 +576,71 @@ tr.row-in-progress-today { background-color: #fef5e7; }
 
 /* Стиль для строки-полуфабриката */
 tr.is-semifinished {
-    background-color: #ffe0e0 !important; /* Светло-красный фон */
+    background-color: #ffe0e0 !important;
 }
 
-/* Кнопка добавления параметров ПФ */
-.add-pf-params-btn {
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: 1.5rem;
-    padding: 0 5px;
-    color: #3498db;
-}
-.add-pf-params-btn:hover {
-    color: #2980b9;
+tr.is-semifinished td.has-comment.is-semifinished-cell {
+    background-color: #ffc0c0 !important; /* Насыщенный красный */
 }
 
-/* Список параметров в ячейке */
-.pf-params-list {
-    font-size: 0.8rem;
-    color: #c0392b;
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    text-align: left;
+tr.is-in-progress {
+    background-color: #fef5e7; /* Светло-оранжевый */
 }
 
-.params-checklist {
+tr.is-finished {
+    background-color: #e8f8f5; /* Светло-зеленый */
+}
+
+/* --- Стили для переключателя (Switch) --- */
+.switch-container {
     display: flex;
-    flex-direction: column;
-    gap: 10px;
-    margin: 20px 0;
-    max-height: 300px;
-    overflow-y: auto;
+    justify-content: space-between;
+    align-items: center;
+    margin: 15px 0;
 }
-.params-checklist label {
-    display: block;
+.switch-label {
+    font-weight: bold;
+}
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 60px;
+    height: 34px;
+}
+.switch input { 
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: .4s;
+}
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 26px;
+    width: 26px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    transition: .4s;
+}
+input:checked + .slider {
+    background-color: #c0392b; /* Красный цвет */
+}
+input:checked + .slider:before {
+    transform: translateX(26px);
+}
+.slider.round {
+    border-radius: 34px;
+}
+.slider.round:before {
+    border-radius: 50%;
 }
