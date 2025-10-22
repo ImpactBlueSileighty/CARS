@@ -767,7 +767,7 @@ app.put('/api/workshop/:id', async (req, res) => {
 
 // API для бортов (слесарный цех)
 app.post('/api/workshop/filter', async (req, res) => {
-    // ИСПРАВЛЕНО: Принимаем все возможные фильтры из тела запроса
+    // 1. Принимаем все возможные фильтры
     const { bpla_id, number, supplier_id, engines, status, ...paramsFilters } = req.body;
 
     if (!bpla_id) {
@@ -776,23 +776,27 @@ app.post('/api/workshop/filter', async (req, res) => {
 
     try {
         const configRes = await pool.query('SELECT workshop_config FROM bpla WHERE id = $1', [bpla_id]);
-        if (!configRes.rows.length || !configRes.rows[0].workshop_config?.params) {
-            return res.json([]);
-        }
-
-        const paramKeys = Object.keys(configRes.rows[0].workshop_config.params);
+        const paramKeys = Object.keys(configRes.rows[0]?.workshop_config?.params || {});
         const isFinishedCondition = paramKeys.length > 0 
             ? paramKeys.map(key => `(b.workshop_params->>'${key}' IS NOT NULL)`).join(' AND ')
             : 'FALSE';
 
         let query = `
-            SELECT b.*, s.name as supplier_name, bp.name as bpla_name
+            SELECT b.*, s.name as supplier_name, bp.name as bpla_name,
+                   CASE
+                       WHEN b.is_semi_finished = TRUE THEN 'red'
+                       WHEN ${isFinishedCondition} THEN 'green'
+                       ELSE 'orange'
+                   END as status_color
             FROM boards b
             LEFT JOIN suppliers s ON b.supplier_id = s.id
             LEFT JOIN bpla bp ON b.bpla_id = bp.id
             WHERE b.bpla_id = $1`;
+        
         const params = [bpla_id];
-    if (number) {
+
+        // --- 2. ВОССТАНОВЛЕНА ПОЛНАЯ ЛОГИКА ФИЛЬТРАЦИИ ---
+        if (number) {
             params.push(`%${number.trim().toLowerCase()}%`);
             query += ` AND LOWER(TRIM(b.number)) ILIKE $${params.length}`;
         }
@@ -804,22 +808,25 @@ app.post('/api/workshop/filter', async (req, res) => {
             params.push(engines);
             query += ` AND b.workshop_params->>'dvs' = ANY($${params.length}::text[])`;
         }
+        // Фильтр по динамическим параметрам (галочкам)
         for (const key in paramsFilters) {
             if (paramsFilters[key] === true) {
                 query += ` AND b.workshop_params ->> '${key}' IS NOT NULL`;
             }
         }
+        // Фильтр по статусу
         if (status) {
-            if (status === 'in_progress') {
-                query += ` AND b.is_semi_finished = FALSE AND NOT (${isFinishedCondition})`;
-            } else if (status === 'finished') {
-                query += ` AND ${isFinishedCondition}`;
-            } else if (status === 'semifinished') {
-                query += ` AND b.is_semi_finished = TRUE`;
-            }
+            if (status === 'in_progress') query += ` AND b.is_semi_finished = FALSE AND NOT (${isFinishedCondition})`;
+            if (status === 'finished') query += ` AND ${isFinishedCondition} AND b.is_semi_finished = FALSE`;
+            if (status === 'semifinished') query += ` AND b.is_semi_finished = TRUE`;
         }
+        // --------------------------------------------------
         
-        query += ` ORDER BY CASE WHEN b.is_semi_finished = TRUE THEN 2 WHEN ${isFinishedCondition} THEN 1 ELSE 0 END, b.creation_date DESC`;
+        query += `
+            ORDER BY
+                CASE WHEN b.is_semi_finished = TRUE THEN 2 WHEN ${isFinishedCondition} THEN 1 ELSE 0 END ASC,
+                b.creation_date DESC`;
+
         const { rows } = await pool.query(query, params);
         res.json(rows);
 
@@ -1013,6 +1020,32 @@ app.get('/api/bpla/:id/workshop-config', async (req, res) => {
     }
 });
 
+app.patch('/api/board/:id/status', async (req, res) => {
+    const { id } = req.params;
+    // В теле запроса ожидаем: { "department": "workshop", "is_finished": true }
+    const { department, is_finished } = req.body;
+
+    // Белый список колонок для безопасности
+    const allowedDepartments = {
+        workshop: 'is_workshop_finished',
+        electrical: 'is_electrical_finished',
+        setup: 'is_setup_finished'
+    };
+
+    const columnName = allowedDepartments[department];
+    if (!columnName) {
+        return res.status(400).json({ error: 'Недопустимый отдел' });
+    }
+
+    try {
+        await pool.query(`UPDATE boards SET ${columnName} = $1 WHERE id = $2`, [!!is_finished, id]);
+        // logAction(req.session.user.id, 'SET_STATUS', `Установлен статус '${columnName}=${is_finished}' для борта ID ${id}`);
+        res.sendStatus(200);
+    } catch (err) {
+        console.error('Ошибка обновления статуса:', err);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
+});
 
 app.patch('/api/board/:id/semifinished', async (req, res) => {
   const { id } = req.params;
