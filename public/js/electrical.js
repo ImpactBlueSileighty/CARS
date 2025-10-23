@@ -14,9 +14,12 @@ document.addEventListener("DOMContentLoaded", () => {
     const modal = document.getElementById('addModal');
     const closeModalBtn = document.getElementById('closeModalBtn');
     const filterForm = document.getElementById('filterForm');
-    const modalBplaSelector = document.getElementById('bplaId');
     const modalParamsFieldset = document.getElementById('paramsFieldset');
     const modalPcContainer = document.getElementById('modalPcContainer');
+    
+    // ДОБАВЛЕНО: Элементы для комментариев
+    const tooltip = document.getElementById('commentTooltip');
+    const commentModal = document.getElementById('commentModal');
 
     // --- 3. Функции для работы с API ---
 
@@ -51,11 +54,10 @@ document.addEventListener("DOMContentLoaded", () => {
             bpla_id: currentBplaId,
             number: document.getElementById('numberFilter')?.value.trim(),
             supplier_id: document.getElementById('supplierFilter')?.value || null,
+            status: document.getElementById('statusFilter')?.value || null // <-- ДОБАВЛЕНО
         };
-        // Собираем состояния чекбоксов
         filterForm.querySelectorAll('.checkbox-group input[type="checkbox"]').forEach(checkbox => {
-            const key = checkbox.id.replace('filter_', '');
-            filters[key] = checkbox.checked;
+            filters[checkbox.id.replace('filter_', '')] = checkbox.checked;
         });
         return filters;
     };
@@ -80,57 +82,57 @@ document.addEventListener("DOMContentLoaded", () => {
     // --- 4. Функции отрисовки UI ---
 
     function updateUiForBplaType() {
-        // 1. Отрисовка заголовков таблицы
         let headersHtml = `<tr><th>Номер</th><th>Поставщик</th><th>ПК</th>`;
-        for (const key in currentConfig.params) {
-            headersHtml += `<th>${currentConfig.params[key]}</th>`;
-        }
+        for (const key in currentConfig.params) { headersHtml += `<th>${currentConfig.params[key]}</th>`; }
         headersHtml += `<th>Действия</th></tr>`;
         tableHead.innerHTML = headersHtml;
 
-        // 2. Отрисовка блока фильтров
         let filterHtml = `
-            <div class="filter-controls">
-                <div class="primary-filters">
-                    <label>Номер борта: <input type="text" id="numberFilter" /></label>
-                    <label>Поставщик: <select id="supplierFilter"><option value="">Все</option></select></label>
-                </div>
-                <fieldset class="checkbox-fieldset">
-                    <legend>Установленные компоненты</legend>
-                    <div class="checkbox-group">`;
-        
-        for (const key in currentConfig.params) {
-             if (key !== 'seal_number') {
-                filterHtml += `<label><input type="checkbox" id="filter_${key}" /> ${currentConfig.params[key]}</label>`;
-             }
-        }
-        
-        filterHtml += `
-                    </div>
-                </fieldset>
+            <div class="primary-filters">
+                <label>Номер борта: <input type="text" id="numberFilter" /></label>
+                <label>Поставщик: <select id="supplierFilter"><option value="">Все</option></select></label>
+                <label>Статус:
+                    <select id="statusFilter">
+                        <option value="">Все</option>
+                        <option value="in_progress">В работе</option>
+                        <option value="finished">Готов</option>
+                        <option value="semifinished">Полуфабрикат</option>
+                    </select>
+                </label>
             </div>
-            <div class="filter-actions">
-                <button type="button" id="resetFilterBtn">Сбросить</button>
-            </div>`;
-            
+            <fieldset class="checkbox-fieldset"><legend>Установленные компоненты</legend><div class="checkbox-group">`;
+        for (const key in currentConfig.params) {
+            if (key !== 'seal_number') { filterHtml += `<label><input type="checkbox" id="filter_${key}" /> ${currentConfig.params[key]}</label>`; }
+        }
+        filterHtml += `</div></fieldset><div class="filter-actions"><button type="button" id="resetFilterBtn">Сбросить</button></div>`;
         filterForm.innerHTML = filterHtml;
         loadSuppliers();
     }
 
     function renderTable(boards) {
         tableBody.innerHTML = '';
-        const colspan = (currentConfig.params ? Object.keys(currentConfig.params).length : 0) + 4;
         if (!boards.length) {
-            tableBody.innerHTML = `<tr><td colspan="${colspan}" style="text-align:center;">Нет данных</td></tr>`;
+            tableBody.innerHTML = `<tr><td colspan="10">Нет данных</td></tr>`;
             return;
         }
         boards.forEach(board => {
             const tr = document.createElement('tr');
+            // Применяем классы статусов
+            if (board.status_color === 'red') tr.classList.add('is-semifinished');
+            else if (board.status_color === 'green') tr.classList.add('is-finished');
+            else tr.classList.add('is-in-progress');
+
             const params = board.electrical_params || {};
             let paramsHtml = `<td>${board.controller_name || 'N/A'}</td>`;
             for (const key in currentConfig.params) {
-                 const displayValue = key === 'seal_number' ? (params[key] || 'N/A') : findModelName(key, params[key]);
-                paramsHtml += `<td>${displayValue}</td>`;
+                const displayValue = key === 'seal_number' ? (params[key] || 'N/A') : findModelName(key, params[key]);
+                const comment = board.electrical_comments ? board.electrical_comments[key] : null; // Используем electrical_comments
+                paramsHtml += `
+                    <td class="parameter-cell ${comment ? 'has-comment' : ''}" data-comment="${comment || ''}">
+                        ${displayValue}
+                        ${comment ? '<span class="comment-indicator">💬</span>' : ''}
+                        <button class="edit-comment-btn" data-board-id="${board.id}" data-param-name="${key}" data-param-label="${currentConfig.params[key]}">✏️</button>
+                    </td>`;
             }
             tr.innerHTML = `<td>${board.number}</td><td>${board.supplier_name || 'N/A'}</td>${paramsHtml}<td class="actions-cell"><button onclick="window.editElectricalBoard(${board.id})">✏️</button></td>`;
             tableBody.appendChild(tr);
@@ -282,36 +284,113 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
+
+    function initCommentEditor() {
+        // Обработчики для всплывающей подсказки (tooltip)
+        tableBody.addEventListener('mouseover', e => { 
+            const cell = e.target.closest('.parameter-cell');
+            if (cell && cell.dataset.comment) { 
+                tooltip.textContent = cell.dataset.comment; 
+                tooltip.style.display = 'block'; 
+            } 
+        }); 
+        tableBody.addEventListener('mousemove', e => { 
+            tooltip.style.left = `${e.pageX + 15}px`; 
+            tooltip.style.top = `${e.pageY + 15}px`; 
+        }); 
+        tableBody.addEventListener('mouseout', () => { 
+            tooltip.style.display = 'none'; 
+        });
+
+        let currentCommentData = {};
+
+        // Обработчик для открытия модального окна
+        tableBody.addEventListener('click', e => {
+            if (e.target.classList.contains('edit-comment-btn')) {
+                const button = e.target;
+                const boardId = button.dataset.boardId;
+                const board = boardsData.find(b => b.id == boardId);
+                if (!board) return;
+
+                currentCommentData = { boardId, paramName: button.dataset.paramName };
+                document.getElementById('commentParamName').textContent = button.dataset.paramLabel;
+                document.getElementById('commentTextarea').value = button.closest('.parameter-cell').dataset.comment || '';
+
+                // Читаем статус из правильного поля для электроцеха
+                document.getElementById('semiFinishedSwitch').checked = board.department_statuses?.electrical?.is_semi_finished || false;
+                
+                commentModal.style.display = 'flex';
+            }
+        });
+
+        // --- ФИНАЛЬНАЯ, ИСПРАВЛЕННАЯ ФУНКЦИЯ СОХРАНЕНИЯ ---
+        const saveComment = async (commentText, isSemiFinished) => {
+            // Добавляем `try...catch` для отлова любых ошибок
+            try {
+                // Отправляем запрос на наш ЕДИНЫЙ универсальный API
+                const res = await fetch(`/api/workshop/${currentCommentData.boardId}/comment`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        parameter: currentCommentData.paramName, 
+                        comment: commentText,
+                        is_semi_finished: isSemiFinished,
+                        department: 'electrical' // Явно указываем, что мы из электроцеха
+                    })
+                });
+
+                // Проверяем, что сервер ответил успехом
+                if (!res.ok) {
+                    // Если сервер вернул ошибку (4xx, 5xx), мы ее увидим в консоли
+                    console.error('Сервер вернул ошибку:', res.status, await res.text());
+                    throw new Error('Ошибка сохранения на сервере');
+                }
+                
+                // Если все хорошо, закрываем окно и обновляем таблицу
+                commentModal.style.display = 'none';
+                await loadAndRenderTable();
+            } catch (error) { 
+                // Если произошла любая ошибка (ошибка сети или сервера), показываем сообщение
+                alert('Не удалось обработать комментарий. Смотрите консоль (F12).'); 
+                console.error(error);
+            }
+        };
+        
+        // Привязываем события к кнопкам модального окна
+        document.getElementById('closeCommentModal').onclick = () => commentModal.style.display = 'none';
+        document.getElementById('saveCommentBtn').onclick = () => saveComment(document.getElementById('commentTextarea').value, document.getElementById('semiFinishedSwitch').checked);
+        document.getElementById('deleteCommentBtn').onclick = () => saveComment('', document.getElementById('semiFinishedSwitch').checked);
+    }
+
     // --- 7. Инициализация ---
     async function init() {
         await Promise.all([loadBplaTypes(), loadSuppliers()]);
-        
         bplaSelector.addEventListener('change', onBplaTypeChange);
-        if (bplaSelector.options.length > 0) {
-            bplaSelector.selectedIndex = 0;
-            await onBplaTypeChange();
-        }
-
-        closeModalBtn.addEventListener('click', () => modal.style.display = 'none');
-        window.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
-        form.addEventListener('submit', onFormSubmit);
+        if (bplaSelector.options.length > 0) await onBplaTypeChange();
         
-        filterForm.addEventListener('input', (e) => {
-            // Чтобы не вызывать фильтрацию на каждый символ, добавим небольшую задержку (debounce)
-            // Это стандартная практика для высоконагруженных интерфейсов
-            clearTimeout(filterForm.debounceTimer);
-            filterForm.debounceTimer = setTimeout(() => {
-                loadAndRenderTable();
-            }, 300); // задержка в 300 мс
+        // ИСПРАВЛЕНО: Обработчики вешаются после создания фильтров
+        const debounce = (func, delay = 300) => { /* ... */ };
+        const debouncedFilter = debounce(loadAndRenderTable);
+        
+        // Используем делегирование событий для динамически созданных элементов
+        filterForm.addEventListener('input', e => {
+            if (e.target.matches('#numberFilter')) {
+                debouncedFilter();
+            }
         });
-
-        // Обработка кнопки "Сбросить" через делегирование
-        filterForm.addEventListener('click', (e) => {
+        filterForm.addEventListener('change', e => {
+            if (e.target.matches('#supplierFilter, #statusFilter, .checkbox-group input')) {
+                loadAndRenderTable();
+            }
+        });
+        filterForm.addEventListener('click', e => {
             if (e.target.id === 'resetFilterBtn') {
                 filterForm.reset();
                 loadAndRenderTable();
             }
         });
+
+        initCommentEditor();
     }
 
     async function onBplaTypeChange() {

@@ -156,7 +156,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 <td>${board.supplier_name || 'N/A'}</td>
                 ${paramsHtml}
                 <td class="actions-cell">
-                    <button class="edit-btn" data-board-id="${board.id}">✏️</button>
+                    <button class="edit-btn" data-board-id="${board.id}" title="Редактировать">✏️</button>
+                    <button class="delete-btn" data-board-id="${board.id}" title="Удалить">🗑️</button>
                 </td>`;
             tableBody.appendChild(tr);
         });
@@ -205,21 +206,20 @@ document.addEventListener("DOMContentLoaded", () => {
     function openModal(boardId = null) {
         form.reset();
         editBoardId = boardId;
-
-        if (editBoardId) { // --- РЕЖИМ РЕДАКТИРОВАНИЯ ---
+        if (editBoardId) { // Режим редактирования
             const board = boardsData.find(b => b.id === editBoardId);
             if (!board) return;
             modalBplaSelector.value = board.bpla_id;
-            modalBplaSelector.disabled = true; // Блокируем смену типа при редактировании
+            modalBplaSelector.disabled = true;
             document.getElementById('number').value = board.number;
             document.getElementById('supplierId').value = board.supplier_id || '';
             renderModalParams(currentConfig, board.workshop_params || {});
-        } else { // --- РЕЖИМ СОЗДАНИЯ (ИСПРАВЛЕНО) ---
-            modalBplaSelector.disabled = false; // РАЗРЕШАЕМ ВЫБОР
-            modalBplaSelector.value = '';     // Сбрасываем выбор
+        } else { // Режим создания
+            modalBplaSelector.disabled = false;
+            modalBplaSelector.value = '';
             document.getElementById('number').value = '';
             document.getElementById('supplierId').value = '';
-            modalParamsFieldset.innerHTML = '<legend>Параметры</legend><p>Сначала выберите тип БПЛА.</p>'; // Просим выбрать тип
+            modalParamsFieldset.innerHTML = '<legend>Параметры</legend><p>Сначала выберите тип БПЛА.</p>';
         }
         modal.style.display = 'flex';
     }
@@ -306,68 +306,78 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    tableBody.addEventListener('click', e => {
-        if (e.target.closest('.edit-btn')) openModal(parseInt(e.target.closest('.edit-btn').dataset.boardId, 10));
+    tableBody.addEventListener('click', async (e) => {
+    const editButton = e.target.closest('.edit-btn');
+    if (editButton) {
+        openModal(parseInt(editButton.dataset.boardId, 10));
+        return; // Выходим, чтобы не обрабатывать другие клики
+    }
+
+    const deleteButton = e.target.closest('.delete-btn');
+        if (deleteButton) {
+            const boardToDelete = boardsData.find(b => b.id == boardId);
+            if (!boardToDelete) return;
+            if (confirm(`Вы уверены, что хотите удалить борт № ${boardToDelete.number}?`)) {
+                try {
+                    const res = await fetch(`/api/board/${boardId}`, { method: 'DELETE' });
+                    if (!res.ok) throw new Error('Ошибка удаления на сервере');
+                    
+                    await loadAndRenderTable(); // Обновляем таблицу после успешного удаления
+                } catch (error) {
+                    console.error('Ошибка при удалении борта:', error);
+                    alert('Не удалось удалить борт.');
+                }
+            }
+        }
     });
 
     function initCommentEditor() {
-        tableBody.addEventListener('mouseover', e => { const cell = e.target.closest('.parameter-cell'); if (cell && cell.dataset.comment) { tooltip.textContent = cell.dataset.comment; tooltip.style.display = 'block'; } }); tableBody.addEventListener('mousemove', e => { tooltip.style.left = `${e.pageX + 15}px`; tooltip.style.top = `${e.pageY + 15}px`; }); tableBody.addEventListener('mouseout', () => { tooltip.style.display = 'none'; });
+        tableBody.addEventListener('mouseover', e => { const cell = e.target.closest('.parameter-cell'); 
+            if (cell && cell.dataset.comment) { 
+                tooltip.textContent = cell.dataset.comment; tooltip.style.display = 'block'; 
+            } 
+        }); 
+        tableBody.addEventListener('mousemove', e => { tooltip.style.left = `${e.pageX + 15}px`; tooltip.style.top = `${e.pageY + 15}px`; }); 
+        tableBody.addEventListener('mouseout', () => { tooltip.style.display = 'none'; });
 
         let currentCommentData = {};
-
-        // Обработчик клика по кнопке редактирования комментария
         tableBody.addEventListener('click', e => {
             if (e.target.classList.contains('edit-comment-btn')) {
                 const button = e.target;
                 const boardId = button.dataset.boardId;
                 const board = boardsData.find(b => b.id == boardId);
                 if (!board) return;
-
-                currentCommentData = {
-                    boardId: boardId,
-                    paramName: button.dataset.paramName,
-                };
-                
+                currentCommentData = { boardId, paramName: button.dataset.paramName };
                 document.getElementById('commentParamName').textContent = button.dataset.paramLabel;
                 document.getElementById('commentTextarea').value = button.closest('.parameter-cell').dataset.comment;
-                // Устанавливаем состояние переключателя
-                document.getElementById('semiFinishedSwitch').checked = board.is_semi_finished;
+                
+                // ИЗМЕНЕНИЕ №1: Читаем статус из нового JSONB-поля
+                document.getElementById('semiFinishedSwitch').checked = (board.workshop_status === 'semifinished');
+                
                 commentModal.style.display = 'flex';
             }
         });
 
         const saveComment = async (commentText, isSemiFinished) => {
-            try {
-                const res = await fetch(`/api/workshop/${currentCommentData.boardId}/comment`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        parameter: currentCommentData.paramName, 
-                        comment: commentText,
-                        is_semi_finished: isSemiFinished // Отправляем статус
-                    })
-                });
+        try {
+            // Запрос 1: ОБНОВЛЯЕМ СТАТУС через новый, отдельный API
+            await fetch(`/api/board/${currentCommentData.boardId}/set-semifinished`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    department: 'workshop', // в electrical.js будет 'electrical'
+                    is_semi_finished: isSemiFinished
+                })
+            });
                 if (!res.ok) throw new Error('Ошибка сохранения');
                 commentModal.style.display = 'none';
-                loadAndRenderTable();
-            } catch (error) {
-                alert('Не удалось обработать комментарий.');
-                console.error(error);
-            }
+                await loadAndRenderTable();
+            } catch (error) { alert('Не удалось обработать комментарий.'); }
         };
 
         document.getElementById('closeCommentModal').onclick = () => commentModal.style.display = 'none';
-    
-        document.getElementById('saveCommentBtn').onclick = () => {
-            const commentText = document.getElementById('commentTextarea').value;
-            const isSemiFinished = document.getElementById('semiFinishedSwitch').checked;
-            saveComment(commentText, isSemiFinished);
-        };
-        
-        document.getElementById('deleteCommentBtn').onclick = () => {
-            const isSemiFinished = document.getElementById('semiFinishedSwitch').checked;
-            saveComment('', isSemiFinished);
-        };
+        document.getElementById('saveCommentBtn').onclick = () => saveComment(document.getElementById('commentTextarea').value, document.getElementById('semiFinishedSwitch').checked);
+        document.getElementById('deleteCommentBtn').onclick = () => saveComment('', document.getElementById('semiFinishedSwitch').checked);
     }
 
 
@@ -379,8 +389,30 @@ document.addEventListener("DOMContentLoaded", () => {
         openModalBtn.addEventListener('click', () => openModal());
         closeModalBtn.addEventListener('click', () => modal.style.display = 'none');
         window.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
-        modalBplaSelector.addEventListener('change', async (e) => { /* ... код для динамической подгрузки в модалке ... */ });
-        if (bplaSelector.options.length > 0) await onBplaTypeChange();
+        modalBplaSelector.addEventListener('change', async (e) => {
+            const bplaId = e.target.value;
+            let configToRender = {}; // По умолчанию пустая конфигурация
+
+            if (bplaId) {
+                try {
+                    const res = await fetch(`/api/bpla/${bplaId}/workshop-config`);
+                    if (!res.ok) throw new Error('Конфигурация не найдена');
+                    configToRender = await res.json();
+                } catch (err) {
+                    console.error("Не удалось загрузить параметры в модальном окне:", err);
+                    modalParamsFieldset.innerHTML = '<legend>Ошибка</legend><p>Не удалось загрузить параметры.</p>';
+                    return; // Выходим, чтобы не рендерить пустые поля при ошибке
+                }
+            }
+            // Отрисовываем параметры для выбранного типа (или пустые, если тип не выбран)
+            renderModalParams(configToRender, {});
+        });
+
+        // Запуск начальной загрузки данных
+        if (bplaSelector.options.length > 0) {
+            bplaSelector.selectedIndex = 0;
+            await onBplaTypeChange();
+        }
         initCommentEditor();
     }
 

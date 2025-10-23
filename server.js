@@ -13,16 +13,11 @@ const app = express();
 app.use(express.json());
 
 app.use(session({
-  store: new PgSession({
-    pool: pool,                // Используем наш пул соединений с БД
-    tableName: 'user_sessions' // Имя таблицы для хранения сессий
-  }),
-  secret: 'cars123', // ЗАМЕНИТЕ ЭТО НА СЛУЧАЙНУЮ СТРОКУ
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    maxAge: 30 * 24 * 60 * 60 * 1000 // 30 дней - время жизни "запомнить меня"
-  }
+    store: new PgSession({ pool: pool, tableName: 'user_sessions' }),
+    secret: 'cars123',
+    resave: false,
+    saveUninitialized: false,
+    cookie: { maxAge: 30 * 24 * 60 * 60 * 1000 }
 }));
 
 // Multer — сохраняет файл под именем из req.body
@@ -733,105 +728,81 @@ app.post('/api/summary/filter', async (req, res) => {
 // API для обновления комментария и статуса ПФ
 app.post('/api/workshop/:boardId/comment', async (req, res) => {
     const { boardId } = req.params;
-    const { parameter, comment, is_semi_finished } = req.body;
-    const userId = req.session.user.id;
+    const { parameter, comment, is_semi_finished, department } = req.body;
+    if (!department || !['workshop', 'electrical', 'setup'].includes(department)) {
+        return res.status(400).json({ error: 'Не указан корректный отдел' });
+    }
+    const client = await pool.connect();
     try {
-        await pool.query('UPDATE boards SET is_semi_finished = $1 WHERE id = $2', [!!is_semi_finished, boardId]);
-        await pool.query(
-            `UPDATE boards SET workshop_comments = jsonb_set(COALESCE(workshop_comments, '{}'::jsonb), $1, to_jsonb($2::text), true) WHERE id = $3`,
-            [`{${parameter}}`, comment, boardId]
+        await client.query('BEGIN');
+        // --- КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ №1: Добавлен флаг `true` для создания полей ---
+        await client.query(
+            `UPDATE boards SET department_statuses = jsonb_set(COALESCE(department_statuses, '{}'::jsonb), '{${department}, is_semi_finished}', to_jsonb($1::boolean), true) WHERE id = $2`,
+            [!!is_semi_finished, boardId]
         );
-        logAction(userId, 'UPDATE_COMMENT_AND_STATUS', `Обновлен комментарий и статус ПФ для борта ID ${boardId}`);
+        const commentColumn = `${department}_comments`;
+        await client.query(
+            `UPDATE boards SET ${commentColumn} = jsonb_set(COALESCE(${commentColumn}, '{}'::jsonb), '{${parameter}}', to_jsonb($1::text), true) WHERE id = $2`,
+            [comment, boardId]
+        );
+        await client.query('COMMIT');
         res.sendStatus(200);
     } catch (err) {
+        await client.query('ROLLBACK');
         console.error('Ошибка сохранения комментария/статуса:', err);
         res.status(500).json({ error: 'Внутренняя ошибка сервера' });
+    } finally {
+        client.release();
     }
 });
 
-
-app.put('/api/workshop/:id', async (req, res) => {
+app.patch('/api/board/:id/set-semifinished', async (req, res) => {
     const { id } = req.params;
-    const { number, supplier_id, workshop_params } = req.body;
+    const { department, is_semi_finished } = req.body;
+    const statusColumn = `${department}_status`;
+    const newStatus = is_semi_finished ? 'semifinished' : 'in_progress';
+
     try {
-        await pool.query(
-            'UPDATE boards SET number = $1, supplier_id = $2, workshop_params = $3 WHERE id = $4',
-            [number, supplier_id, workshop_params, id]
-        );
+        await pool.query(`UPDATE boards SET ${statusColumn} = $1 WHERE id = $2`, [newStatus, id]);
+        // Если мы снимаем флаг "Полуфабрикат", нужно пересчитать статус "Готов"
+        if (!is_semi_finished) {
+            await recalculateBoardStatus(id, department);
+        }
         res.sendStatus(200);
-    } catch (e) {
-        res.status(500).json({error: "Server error"});
+    } catch (err) {
+        console.error('Ошибка обновления статуса полуфабриката:', err);
+        res.status(500).json({ error: 'Ошибка сервера' });
     }
 });
 
 
-// API для бортов (слесарный цех)
 app.post('/api/workshop/filter', async (req, res) => {
-    // 1. Принимаем все возможные фильтры
-    const { bpla_id, number, supplier_id, engines, status, ...paramsFilters } = req.body;
-
-    if (!bpla_id) {
-        return res.status(400).json({ error: 'Не указан ID БПЛА' });
-    }
-
+    const { bpla_id, status } = req.body;
+    if (!bpla_id) return res.status(400).json({ error: 'Не указан ID БПЛА' });
     try {
-        const configRes = await pool.query('SELECT workshop_config FROM bpla WHERE id = $1', [bpla_id]);
-        const paramKeys = Object.keys(configRes.rows[0]?.workshop_config?.params || {});
-        const isFinishedCondition = paramKeys.length > 0 
-            ? paramKeys.map(key => `(b.workshop_params->>'${key}' IS NOT NULL)`).join(' AND ')
-            : 'FALSE';
-
         let query = `
             SELECT b.*, s.name as supplier_name, bp.name as bpla_name,
-                   CASE
-                       WHEN b.is_semi_finished = TRUE THEN 'red'
-                       WHEN ${isFinishedCondition} THEN 'green'
+                   CASE 
+                       WHEN b.workshop_status = 'semifinished' THEN 'red'
+                       WHEN b.workshop_status = 'finished' THEN 'green'
                        ELSE 'orange'
                    END as status_color
             FROM boards b
             LEFT JOIN suppliers s ON b.supplier_id = s.id
             LEFT JOIN bpla bp ON b.bpla_id = bp.id
             WHERE b.bpla_id = $1`;
-        
         const params = [bpla_id];
 
-        // --- 2. ВОССТАНОВЛЕНА ПОЛНАЯ ЛОГИКА ФИЛЬТРАЦИИ ---
-        if (number) {
-            params.push(`%${number.trim().toLowerCase()}%`);
-            query += ` AND LOWER(TRIM(b.number)) ILIKE $${params.length}`;
-        }
-        if (supplier_id) {
-            params.push(supplier_id);
-            query += ` AND b.supplier_id = $${params.length}`;
-        }
-        if (engines && engines.length > 0) {
-            params.push(engines);
-            query += ` AND b.workshop_params->>'dvs' = ANY($${params.length}::text[])`;
-        }
-        // Фильтр по динамическим параметрам (галочкам)
-        for (const key in paramsFilters) {
-            if (paramsFilters[key] === true) {
-                query += ` AND b.workshop_params ->> '${key}' IS NOT NULL`;
-            }
-        }
-        // Фильтр по статусу
         if (status) {
-            if (status === 'in_progress') query += ` AND b.is_semi_finished = FALSE AND NOT (${isFinishedCondition})`;
-            if (status === 'finished') query += ` AND ${isFinishedCondition} AND b.is_semi_finished = FALSE`;
-            if (status === 'semifinished') query += ` AND b.is_semi_finished = TRUE`;
+            query += ` AND b.workshop_status = $${params.length + 1}`;
+            params.push(status);
         }
-        // --------------------------------------------------
         
-        query += `
-            ORDER BY
-                CASE WHEN b.is_semi_finished = TRUE THEN 2 WHEN ${isFinishedCondition} THEN 1 ELSE 0 END ASC,
-                b.creation_date DESC`;
-
+        query += ` ORDER BY CASE WHEN b.workshop_status = 'in_progress' THEN 0 WHEN b.workshop_status = 'finished' THEN 1 ELSE 2 END, b.creation_date DESC`;
+        
         const { rows } = await pool.query(query, params);
         res.json(rows);
-
     } catch (e) {
-        console.error("Ошибка фильтрации (цех):", e);
         res.status(500).json({error: "Ошибка на сервере"});
     }
 });
@@ -840,43 +811,74 @@ app.post('/api/workshop/filter', async (req, res) => {
 app.patch('/api/workshop/:id/parameter', async (req, res) => {
     const { id } = req.params;
     const { parameter, value } = req.body;
-    if (!parameter) {
-        return res.status(400).json({ error: 'Имя параметра не указано' });
-    }
     try {
-        const query = `
-            UPDATE boards
-            SET workshop_params = jsonb_set(COALESCE(workshop_params, '{}'::jsonb), $1, $2)
-            WHERE id = $3
-        `;
-        await pool.query(query, [`{${parameter}}`, JSON.stringify(value), id]);
-        logAction(req.session.user.id, 'UPDATE_WORKSHOP_PARAM', `Обновлен параметр цеха '${parameter}' для борта ID ${id}`);
-        res.status(200).json({ message: 'Параметр обновлен' });
+        await pool.query(
+            `UPDATE boards SET workshop_params = jsonb_set(COALESCE(workshop_params, '{}'::jsonb), '{${parameter}}', to_jsonb($1::text), true) WHERE id = $2`,
+            [value, id]
+        );
+        // После обновления параметра, ПЕРЕСЧИТЫВАЕМ СТАТУС "ГОТОВ"
+        await recalculateBoardStatus(id, 'workshop');
+        res.sendStatus(200);
     } catch (err) {
-        console.error('Ошибка частичного обновления (цех):', err);
         res.status(500).json({ error: 'Ошибка сервера' });
     }
 });
 
-const workshopConfigs = {
-    '2': { 
-        params: { 'chassis': 'Шасси', 'tail_booms': 'Хвостовые балки', 'fuel_system': 'Топливная система', 'foam_gluing': 'Вклейка пены' },
-        engines: ['DLE55RA', 'DLE55', 'DLE60']
-    },
-    '1': { 
-        params: { 'tail_boom_assembly': 'Сборка хвост. балки', 'catapult_hooks': 'Зацепы катапульты', 'fuel_system': 'Топливная система', 'rods': 'Тяги' },
-        engines: ['NGH38']
-    },
-    '4': { 
-        params: { 'lead_weight': 'Свинцовый груз', 'catapult_hooks': 'Зацепы катапульты', 'fuel_system': 'Топливная система', 'rods': 'Тяги'},
-        engines: ['DLE 120', 'Stinger'] // Предполагаем те же двигатели, что у Дельта Турбо. Измените, если нужно.
-    },
-    '5': {
-        params: { 'catapult_hooks': 'Зацепы катапульты', 'fuel_system': 'Топливная система', 'rods': 'Тяги', 'fairing': 'Обтекатель', 'parachute_compartment': 'Отсек под парашют', 'parachute_slings': 'Стропы парашюта'},
-        engines: ['Турбина Swiwin Turbojet']
+app.patch('/api/electrical/:id/parameter', async (req, res) => {
+    const { id } = req.params;
+    const { parameter, value } = req.body; // Ожидаем, например, { parameter: 'telemetry_id', value: '5' }
+
+    if (!parameter) {
+        return res.status(400).json({ error: 'Имя параметра не указано' });
     }
-    // Добавьте сюда конфигурации для Дельта М и Дельта ТМ по их ID
-};
+
+    try {
+        // Обновляем значение компонента в JSONB-поле electrical_params
+        await pool.query(
+            `UPDATE boards 
+             SET electrical_params = jsonb_set(
+                COALESCE(electrical_params, '{}'::jsonb), 
+                '{${parameter}}', 
+                to_jsonb($1::text), 
+                true
+             ) 
+             WHERE id = $2`,
+            [value, id]
+        );
+        
+        // После обновления параметра, ПЕРЕСЧИТЫВАЕМ СТАТУС "ГОТОВ"
+        await recalculateBoardStatus(id, 'electrical');
+        
+        res.sendStatus(200);
+    } catch (err) {
+        console.error('Ошибка обновления параметра (электромонтаж):', err);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
+});
+
+async function recalculateBoardStatus(boardId, department) {
+    const boardRes = await pool.query(`SELECT bpla_id, ${department}_params FROM boards WHERE id = $1`, [boardId]);
+    if (!boardRes.rows.length) return;
+
+    const board = boardRes.rows[0];
+    const configColumn = department === 'workshop' ? 'workshop_config' : 'electrical_config';
+    const configRes = await pool.query(`SELECT ${configColumn} FROM bpla WHERE id = $1`, [board.bpla_id]);
+    const config = configRes.rows[0]?.[configColumn];
+
+    if (!config?.params) return;
+
+    const paramKeys = Object.keys(config.params);
+    const paramsData = board[`${department}_params`];
+    const isFinished = paramKeys.every(key => paramsData?.[key] != null && paramsData?.[key] !== '');
+    const newStatus = isFinished ? 'finished' : 'in_progress';
+    
+    const statusColumn = `${department}_status`;
+    // Обновляем статус, только если он не "Полуфабрикат"
+    await pool.query(
+        `UPDATE boards SET ${statusColumn} = $1 WHERE id = $2 AND ${statusColumn} != 'semifinished'`,
+        [newStatus, boardId]
+    );
+}
 
 const electricalConfigs = {
     '2': { params: ['telemetry_id', 'bec_id', 'gps_id', 'video_tx_id', 'pvd_id', 'seal_number'] },
@@ -920,21 +922,13 @@ app.get('/api/bpla/:bplaId/compatible-controllers', async (req, res) => {
 });
 
 app.get('/api/electrical/components/:bplaId', async (req, res) => {
-    const { bplaId } = req.params;
-    const createQuery = (componentTable, compatTable, componentFk, componentPk = 'id') => {
-        const sql = `
-            SELECT t1.${componentPk}, t1.model_name FROM public.${componentTable} t1
-            JOIN public.${compatTable} t2 ON t1.${componentPk} = t2.${componentFk}
-            WHERE t2.bpla_id = $1 ORDER BY t1.model_name`;
-        return pool.query(sql, [bplaId]);
-    };
     try {
         const [telemetries, becs, gps, video_txs, pvds] = await Promise.all([
-            createQuery('telemetry_modules', 'bpla_telemetry_compatibility', 'telemetry_module_id'),
-            createQuery('bec_modules', 'bpla_bec_compatibility', 'bec_module_id'),
-            createQuery('gps_modules', 'bpla_gps_compatibility', 'gps_module_id'),
-            createQuery('video_transmitters', 'bpla_video_tx_compatibility', 'video_transmitter_id'),
-            createQuery('pvd_modules', 'bpla_pvd_compatibility', 'pvd_module_id')
+            pool.query('SELECT id, model_name FROM telemetry_modules ORDER BY model_name'),
+            pool.query('SELECT id, model_name FROM bec_modules ORDER BY model_name'),
+            pool.query('SELECT id, model_name FROM gps_modules ORDER BY model_name'),
+            pool.query('SELECT id, model_name FROM video_transmitters ORDER BY model_name'),
+            pool.query('SELECT id, model_name FROM pvd_modules ORDER BY model_name')
         ]);
         res.json({
             telemetry_modules: telemetries.rows,
@@ -944,49 +938,62 @@ app.get('/api/electrical/components/:bplaId', async (req, res) => {
             pvd_models: pvds.rows
         });
     } catch (e) {
-        console.error("Ошибка загрузки компонентов электромонтажа из БД:", e);
+        console.error("Ошибка загрузки компонентов:", e);
         res.status(500).json({ error: "Ошибка на сервере" });
     }
 });
 
 // Фильтрация для таблицы электромонтажа
+// server.js
+
+// ИСПРАВЛЕННЫЙ ФИЛЬТР ДЛЯ ЭЛЕКТРОЦЕХА
 app.post('/api/electrical/filter', async (req, res) => {
-    const { bpla_id, number, supplier_id, ...paramsFilters } = req.body;
-    
-    let query = `
-        SELECT b.id, b.number, b.bpla_id, b.supplier_id, b.controller_id, b.electrical_params, s.name as supplier_name, c.name as controller_name
-        FROM boards b
-        LEFT JOIN suppliers s ON b.supplier_id = s.id
-        LEFT JOIN controller c ON b.controller_id = c.id
-        WHERE b.bpla_id = $1`;
-        
-    const params = [bpla_id];
-
-    if (number) {
-        params.push(`%${number.trim().toLowerCase()}%`);
-        query += ` AND LOWER(TRIM(b.number)) ILIKE $${params.length}`;
-    }
-    if (supplier_id) {
-        params.push(supplier_id);
-        query += ` AND b.supplier_id = $${params.length}`;
-    }
-
-    // ИЗМЕНЕНИЕ: Добавляем проверку не только на NULL, но и на пустую строку
-    for (const key in paramsFilters) {
-        if (paramsFilters[key] === true) {
-            // Эта проверка теперь отсеет и отсутствующие ключи, и ключи с null, и ключи с ""
-            query += ` AND b.electrical_params->>'${key}' IS NOT NULL AND b.electrical_params->>'${key}' != ''`;
-        }
-    }
-    
-    query += ' ORDER BY b.id DESC';
+    const { bpla_id, status, number, supplier_id, ...paramsFilters } = req.body;
+    if (!bpla_id) return res.status(400).json({ error: 'Не указан ID БПЛА' });
 
     try {
+        const configRes = await pool.query('SELECT electrical_config FROM bpla WHERE id = $1', [bpla_id]);
+        const paramKeys = Object.keys(configRes.rows[0]?.electrical_config?.params || {});
+
+        // Условие "Готовности" для электроцеха (проверяет electrical_params)
+        const isFinishedCondition = paramKeys.length > 0 
+            ? paramKeys.map(key => `(b.electrical_params->>'${key}' IS NOT NULL AND b.electrical_params->>'${key}' != '')`).join(' AND ') 
+            : 'FALSE';
+
+        let query = `
+            SELECT 
+                b.*, 
+                s.name as supplier_name, 
+                c.name as controller_name,
+                CASE 
+                    WHEN b.electrical_status = 'semifinished' THEN 'red'
+                    WHEN b.electrical_status = 'finished' THEN 'green'
+                    ELSE 'orange' 
+                END as status_color
+            FROM boards b
+            LEFT JOIN suppliers s ON b.supplier_id = s.id
+            LEFT JOIN controller c ON b.controller_id = c.id
+            WHERE b.bpla_id = $1`;
+        
+        const params = [bpla_id];
+
+        // Применяем фильтры
+        if (number) { params.push(`%${number.trim().toLowerCase()}%`); query += ` AND LOWER(TRIM(b.number)) ILIKE $${params.length}`; }
+        if (supplier_id) { params.push(supplier_id); query += ` AND b.supplier_id = $${params.length}`; }
+
+        if (status) {
+            if (status === 'in_progress') query += ` AND b.electrical_status = 'in_progress'`;
+            if (status === 'finished') query += ` AND b.electrical_status = 'finished'`;
+            if (status === 'semifinished') query += ` AND b.electrical_status = 'semifinished'`;
+        }
+        
+        query += ` ORDER BY CASE WHEN b.electrical_status = 'in_progress' THEN 0 WHEN b.electrical_status = 'finished' THEN 1 ELSE 2 END, b.creation_date DESC`;
+        
         const { rows } = await pool.query(query, params);
         res.json(rows);
     } catch (e) {
         console.error("Ошибка фильтрации (электромонтаж):", e);
-        res.status(500).json({error: "Server error"});
+        res.status(500).json({error: "Ошибка на сервере"});
     }
 });
 
@@ -1018,6 +1025,15 @@ app.get('/api/bpla/:id/workshop-config', async (req, res) => {
         console.error('Ошибка получения конфигурации цеха:', err);
         res.status(500).json({ error: 'Внутренняя ошибка сервера' });
     }
+});
+
+app.get('/api/bpla/:id/electrical-config', async (req, res) => {
+    const { id } = req.params;
+    const { rows } = await pool.query('SELECT electrical_config FROM bpla WHERE id = $1', [id]);
+    if (rows.length === 0 || !rows[0].electrical_config) {
+        return res.status(404).json({ error: 'Конфигурация не найдена' });
+    }
+    res.json(rows[0].electrical_config);
 });
 
 app.patch('/api/board/:id/status', async (req, res) => {
