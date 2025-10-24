@@ -54,10 +54,13 @@ document.addEventListener("DOMContentLoaded", () => {
             bpla_id: currentBplaId,
             number: document.getElementById('numberFilter')?.value.trim(),
             supplier_id: document.getElementById('supplierFilter')?.value || null,
-            status: document.getElementById('statusFilter')?.value || null // <-- ДОБАВЛЕНО
+            status: document.getElementById('statusFilter')?.value || null
         };
         filterForm.querySelectorAll('.checkbox-group input[type="checkbox"]').forEach(checkbox => {
-            filters[checkbox.id.replace('filter_', '')] = checkbox.checked;
+            const key = checkbox.id.replace('filter_', '');
+            if (checkbox.checked) {
+                filters[key] = true;
+            }
         });
         return filters;
     };
@@ -70,7 +73,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(getFilters())
             });
-            if (!res.ok) throw new Error('Ошибка сети');
+            if (!res.ok) throw new Error('Ошибка сети при фильтрации');
             boardsData = await res.json();
             renderTable(boardsData);
         } catch (error) {
@@ -117,16 +120,17 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         boards.forEach(board => {
             const tr = document.createElement('tr');
-            // Применяем классы статусов
+            
+            // ОБНОВЛЕНО: Используем status_color от бэкенда для подсветки
             if (board.status_color === 'red') tr.classList.add('is-semifinished');
             else if (board.status_color === 'green') tr.classList.add('is-finished');
-            else tr.classList.add('is-in-progress');
+            else tr.classList.add('is-in-progress'); // orange
 
             const params = board.electrical_params || {};
             let paramsHtml = `<td>${board.controller_name || 'N/A'}</td>`;
             for (const key in currentConfig.params) {
                 const displayValue = key === 'seal_number' ? (params[key] || 'N/A') : findModelName(key, params[key]);
-                const comment = board.electrical_comments ? board.electrical_comments[key] : null; // Используем electrical_comments
+                const comment = board.electrical_comments ? board.electrical_comments[key] : null;
                 paramsHtml += `
                     <td class="parameter-cell ${comment ? 'has-comment' : ''}" data-comment="${comment || ''}">
                         ${displayValue}
@@ -246,38 +250,32 @@ document.addEventListener("DOMContentLoaded", () => {
         e.preventDefault();
         if (!editBoardId) return;
 
-        const board = boardsData.find(b => b.id === editBoardId);
-        if (!board) return;
-
-        const bplaId = board.bpla_id;
-
-        const res = await fetch(`/api/bpla/${bplaId}/electrical-config`);
-        const config = await res.json();
-        
         const electrical_params = {};
-        for (const key in config.params) {
+        for (const key in currentConfig.params) {
             const input = document.getElementById(`param_${key}`);
-            if (input) {
-                // ИЗМЕНЕНИЕ: Сохраняем null, если значение пустое, а не пустую строку
-                electrical_params[key] = input.value ? input.value : null;
-            }
+            if (input) electrical_params[key] = input.value || null;
         }
         
         const body = {
             number: document.getElementById('number').value,
             supplier_id: document.getElementById('supplierId').value || null,
-            controller_id: document.getElementById('param_controller_id').value,
+            controller_id: document.getElementById('param_controller_id').value || null,
             electrical_params
         };
         
         try {
-            const updateRes = await fetch(`/api/electrical/${editBoardId}`, {
+            const response = await fetch(`/api/electrical/${editBoardId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body)
             });
-            if (!updateRes.ok) throw new Error('Ошибка сохранения на сервере');
+            if (!response.ok) {
+                const errorData = await response.text();
+                throw new Error(`Ошибка сохранения на сервере: ${errorData}`);
+            }
+            
             modal.style.display = 'none';
+            editBoardId = null;
             await loadAndRenderTable();
         } catch (error) {
             alert(`Не удалось сохранить данные: ${error.message}`);
@@ -286,7 +284,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
     function initCommentEditor() {
-        // Обработчики для всплывающей подсказки (tooltip)
+        // --- Обработчики для всплывающей подсказки (tooltip) ---
+        // (эта часть остается без изменений)
         tableBody.addEventListener('mouseover', e => { 
             const cell = e.target.closest('.parameter-cell');
             if (cell && cell.dataset.comment) { 
@@ -302,9 +301,9 @@ document.addEventListener("DOMContentLoaded", () => {
             tooltip.style.display = 'none'; 
         });
 
+        // --- Логика модального окна комментариев ---
         let currentCommentData = {};
-
-        // Обработчик для открытия модального окна
+        
         tableBody.addEventListener('click', e => {
             if (e.target.classList.contains('edit-comment-btn')) {
                 const button = e.target;
@@ -312,84 +311,104 @@ document.addEventListener("DOMContentLoaded", () => {
                 const board = boardsData.find(b => b.id == boardId);
                 if (!board) return;
 
-                currentCommentData = { boardId, paramName: button.dataset.paramName };
-                document.getElementById('commentParamName').textContent = button.dataset.paramLabel;
-                document.getElementById('commentTextarea').value = button.closest('.parameter-cell').dataset.comment || '';
+                currentCommentData = {
+                    boardId: boardId,
+                    paramName: button.dataset.paramName
+                };
 
-                // Читаем статус из правильного поля для электроцеха
-                document.getElementById('semiFinishedSwitch').checked = board.department_statuses?.electrical?.is_semi_finished || false;
+                document.getElementById('commentParamName').textContent = button.dataset.paramLabel;
+                document.getElementById('commentTextarea').value = (board.electrical_comments && board.electrical_comments[button.dataset.paramName]) || '';
+                
+                // ОБНОВЛЕНО: Проверяем новую колонку статуса
+                document.getElementById('semiFinishedSwitch').checked = (board.electrical_status === 'semifinished');
                 
                 commentModal.style.display = 'flex';
             }
         });
 
-        // --- ФИНАЛЬНАЯ, ИСПРАВЛЕННАЯ ФУНКЦИЯ СОХРАНЕНИЯ ---
-        const saveComment = async (commentText, isSemiFinished) => {
-            // Добавляем `try...catch` для отлова любых ошибок
+        const saveOrDeleteComment = async (isDelete = false) => {
+            const { boardId, paramName } = currentCommentData;
+            if (!boardId || !paramName) return;
+
+            const commentText = isDelete ? '' : document.getElementById('commentTextarea').value;
+            const isSemiFinished = document.getElementById('semiFinishedSwitch').checked;
+
             try {
-                // Отправляем запрос на наш ЕДИНЫЙ универсальный API
-                const res = await fetch(`/api/workshop/${currentCommentData.boardId}/comment`, {
+                const response = await fetch(`/api/workshop/${boardId}/comment`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        parameter: currentCommentData.paramName, 
+                    body: JSON.stringify({
+                        department: 'electrical',
+                        parameter: paramName,
                         comment: commentText,
-                        is_semi_finished: isSemiFinished,
-                        department: 'electrical' // Явно указываем, что мы из электроцеха
+                        is_semi_finished: isSemiFinished
                     })
                 });
 
-                // Проверяем, что сервер ответил успехом
-                if (!res.ok) {
-                    // Если сервер вернул ошибку (4xx, 5xx), мы ее увидим в консоли
-                    console.error('Сервер вернул ошибку:', res.status, await res.text());
-                    throw new Error('Ошибка сохранения на сервере');
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`Ошибка на сервере: ${errorText}`);
                 }
-                
-                // Если все хорошо, закрываем окно и обновляем таблицу
                 commentModal.style.display = 'none';
                 await loadAndRenderTable();
-            } catch (error) { 
-                // Если произошла любая ошибка (ошибка сети или сервера), показываем сообщение
-                alert('Не удалось обработать комментарий. Смотрите консоль (F12).'); 
-                console.error(error);
+            } catch (error) {
+                alert(`Не удалось сохранить комментарий. Детали в консоли (F12).`);
             }
         };
         
-        // Привязываем события к кнопкам модального окна
         document.getElementById('closeCommentModal').onclick = () => commentModal.style.display = 'none';
-        document.getElementById('saveCommentBtn').onclick = () => saveComment(document.getElementById('commentTextarea').value, document.getElementById('semiFinishedSwitch').checked);
-        document.getElementById('deleteCommentBtn').onclick = () => saveComment('', document.getElementById('semiFinishedSwitch').checked);
+        document.getElementById('saveCommentBtn').onclick = () => saveOrDeleteComment(false);
+        document.getElementById('deleteCommentBtn').onclick = () => saveOrDeleteComment(true);
     }
 
     // --- 7. Инициализация ---
     async function init() {
         await Promise.all([loadBplaTypes(), loadSuppliers()]);
         bplaSelector.addEventListener('change', onBplaTypeChange);
-        if (bplaSelector.options.length > 0) await onBplaTypeChange();
+        if (bplaSelector.options.length > 0) {
+            await onBplaTypeChange();
+        }
         
-        // ИСПРАВЛЕНО: Обработчики вешаются после создания фильтров
-        const debounce = (func, delay = 300) => { /* ... */ };
+        // ВОССТАНОВЛЕНА ПОЛНАЯ ЛОГИКА ОБРАБОТЧИКОВ ФИЛЬТРА
+        const debounce = (func, delay = 350) => {
+            let timeout;
+            return (...args) => {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => {
+                    func.apply(this, args);
+                }, delay);
+            };
+        };
         const debouncedFilter = debounce(loadAndRenderTable);
-        
-        // Используем делегирование событий для динамически созданных элементов
+
         filterForm.addEventListener('input', e => {
             if (e.target.matches('#numberFilter')) {
                 debouncedFilter();
             }
         });
+
         filterForm.addEventListener('change', e => {
             if (e.target.matches('#supplierFilter, #statusFilter, .checkbox-group input')) {
                 loadAndRenderTable();
             }
         });
+
         filterForm.addEventListener('click', e => {
             if (e.target.id === 'resetFilterBtn') {
                 filterForm.reset();
                 loadAndRenderTable();
             }
         });
-
+        
+        const handleCloseModal = () => {
+            modal.style.display = 'none';
+            editBoardId = null;
+        };
+        closeModalBtn.addEventListener('click', handleCloseModal);
+        window.addEventListener('click', (event) => {
+            if (event.target === modal) handleCloseModal();
+        });
+        form.addEventListener('submit', onFormSubmit);
         initCommentEditor();
     }
 

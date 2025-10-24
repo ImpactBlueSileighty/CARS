@@ -85,47 +85,34 @@ document.addEventListener("DOMContentLoaded", () => {
     // --- 4. Функции для отрисовки UI ---
 
     async function updateUiForBplaType() {
-        // Отрисовка заголовков таблицы
         let headersHtml = `<tr><th>Номер</th><th>Поставщик</th><th>ДВС</th>`;
         for (const key in currentConfig.params) { headersHtml += `<th>${currentConfig.params[key]}</th>`; }
         headersHtml += `<th>Действия</th></tr>`;
         tableHead.innerHTML = headersHtml;
 
-        // Отрисовка фильтров
-        let filterHtml = `
-            <div class="primary-filters">
-                <label>Номер борта: <input type="text" id="numberFilter" /></label>
-                <label>Поставщик: <select id="supplierFilter"><option value="">Все</option></select></label>
-                <label>Статус:
-                    <select id="statusFilter">
-                        <option value="">Все</option>
-                        <option value="in_progress">В работе</option>
-                        <option value="finished">Готов</option>
-                        <option value="semifinished">Полуфабрикат</option>
-                    </select>
-                </label>
-            </div>`;
-        if (currentConfig.engines && currentConfig.engines.length > 0) {
+        let filterHtml = `<div class="primary-filters">
+            <label>Номер борта: <input type="text" id="numberFilter" /></label>
+            <label>Поставщик: <select id="supplierFilter"><option value="">Все</option></select></label>
+            <label>Статус:
+                <select id="statusFilter">
+                    <option value="">Все</option>
+                    <option value="in_progress">В работе</option>
+                    <option value="finished">Готов</option>
+                    <option value="semifinished">Полуфабрикат</option>
+                </select>
+            </label>
+        </div>`;
+        if (currentConfig.engines?.length > 0) {
             filterHtml += `<fieldset class="checkbox-fieldset"><legend>Двигатель</legend><div class="checkbox-group">`;
             currentConfig.engines.forEach(engine => { filterHtml += `<label><input type="checkbox" name="engineFilter" value="${engine}" class="live-filter" /> ${engine}</label>`; });
             filterHtml += `</div></fieldset>`;
         }
-        filterHtml += `<fieldset class="checkbox-fieldset"><legend>Параметры</legend><div class="checkbox-group">`;
-        for (const key in currentConfig.params) { filterHtml += `<label><input type="checkbox" id="filter_${key}" class="live-filter" /> ${currentConfig.params[key]}</label>`; }
+        filterHtml += `<fieldset class="checkbox-fieldset"><legend>Параметры</legend><div class="checkbox-group params-filter-group">`;
+        for (const key in currentConfig.params) { filterHtml += `<label><input type="checkbox" data-param-name="${key}" class="live-filter" /> ${currentConfig.params[key]}</label>`; }
         filterHtml += `</div></fieldset><div class="filter-actions"><button type="button" id="resetFilterBtn">Сбросить</button></div>`;
         filterForm.innerHTML = filterHtml;
         
         await loadSuppliers();
-
-        const debounce = (func, delay = 300) => { let timeout; return (...args) => { clearTimeout(timeout); timeout = setTimeout(() => func.apply(this, args), delay); }; };
-        const debouncedFilter = debounce(loadAndRenderTable);
-
-        // Навешиваем обработчики на созданные фильтры
-        document.getElementById('numberFilter').addEventListener('input', debouncedFilter);
-        document.getElementById('supplierFilter').addEventListener('change', loadAndRenderTable);
-        document.getElementById('statusFilter').addEventListener('change', loadAndRenderTable);
-        filterForm.querySelectorAll('.live-filter').forEach(el => el.addEventListener('change', loadAndRenderTable));
-        filterForm.querySelector('#resetFilterBtn').onclick = () => { filterForm.reset(); loadAndRenderTable(); };
     }
 
 
@@ -187,9 +174,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 </div>`;
             modalParamsFieldset.insertAdjacentHTML('beforeend', fieldHtml);
         }
-
-        // --- ВОТ КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ ---
-        // Навешиваем обработчики сразу после создания элементов
+        
         modalParamsFieldset.querySelectorAll('input[type="checkbox"][data-date-target]').forEach(checkbox => {
             const dateInput = document.getElementById(checkbox.dataset.dateTarget);
             if (dateInput) {
@@ -227,10 +212,9 @@ document.addEventListener("DOMContentLoaded", () => {
     window.editWorkshopBoard = async (id) => {
         editBoardId = id;
         const board = boardsData.find(b => b.id === id);
-        if (!board) return;
+        if (!board) return alert('Борт не найден');
 
         form.reset();
-        
         document.getElementById('number').value = board.number || '';
         document.getElementById('supplierId').value = board.supplier_id || '';
         modalBplaSelector.value = board.bpla_id;
@@ -241,12 +225,10 @@ document.addEventListener("DOMContentLoaded", () => {
             if (!res.ok) throw new Error('Config not found');
             const config = await res.json();
             renderModalParams(config, board.workshop_params || {});
+            modal.style.display = 'flex';
         } catch (e) {
             console.error("Не удалось загрузить параметры для редактирования:", e);
-            modalParamsFieldset.innerHTML = '<legend>Ошибка</legend><p>Не удалось загрузить параметры для этого борта.</p>';
         }
-        
-        modal.style.display = 'flex';
     };
 
     window.deleteWorkshopBoard = async (id) => {
@@ -256,27 +238,81 @@ document.addEventListener("DOMContentLoaded", () => {
     };
     
     async function onFormSubmit(e) {
-        e.preventDefault();
-        const workshop_params = { dvs: document.getElementById('param_dvs')?.value || null };
-        for (const key in currentConfig.params) {
-            const checkbox = document.getElementById(`check_${key}`);
-            const dateInput = document.getElementById(`date_${key}`);
-            workshop_params[key] = (checkbox?.checked && dateInput?.value) ? dateInput.value : null;
+        e.preventDefault(); // Предотвращаем стандартное поведение формы
+
+        // Определяем, в каком режиме мы работаем: создание или редактирование
+        const isEditing = !!editBoardId;
+        
+        // Получаем ID БПЛА. Для нового борта - из селектора, для старого - из данных.
+        const bplaIdForConfig = isEditing 
+            ? boardsData.find(b => b.id === editBoardId).bpla_id 
+            : modalBplaSelector.value;
+
+        if (!bplaIdForConfig) {
+            alert('Необходимо выбрать тип БПЛА');
+            return;
         }
-        const body = {
-            bpla_id: modalBplaSelector.value,
-            number: document.getElementById('number').value,
-            supplier_id: document.getElementById('supplierId').value || null,
-            workshop_params
-        };
-        const url = editBoardId ? `/api/workshop/${editBoardId}` : '/api/add_board';
-        const method = editBoardId ? 'PUT' : 'POST';
+
         try {
-            const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-            if (!res.ok) throw new Error('Ошибка сохранения');
+            // Шаг 1: Получаем АКТУАЛЬНУЮ конфигурацию для этого типа БПЛА.
+            // Это "чертёж", по которому мы будем собирать данные с формы.
+            const configRes = await fetch(`/api/bpla/${bplaIdForConfig}/workshop-config`);
+            if (!configRes.ok) throw new Error('Не удалось загрузить конфигурацию для сборки данных');
+            const config = await configRes.json();
+
+            // Шаг 2: Собираем данные с формы согласно "чертежу".
+            const workshop_params = {
+                // Сначала забираем значение двигателя
+                dvs: document.getElementById('param_dvs')?.value || null
+            };
+
+            // Теперь проходимся по всем параметрам из конфигурации
+            for (const key in config.params) {
+                const checkbox = document.getElementById(`check_${key}`);
+                const dateInput = document.getElementById(`date_${key}`);
+                
+                // Записываем дату только если чекбокс отмечен и в поле даты есть значение
+                // Иначе - записываем null. Это очистит поле в базе, если галочку сняли.
+                workshop_params[key] = (checkbox?.checked && dateInput?.value) ? dateInput.value : null;
+            }
+
+            // Шаг 3: Формируем тело запроса
+            const body = {
+                number: document.getElementById('number').value,
+                supplier_id: document.getElementById('supplierId').value || null,
+                workshop_params // Собранные выше параметры
+            };
+            
+            // Для новых бортов нужно также передать bpla_id
+            if (!isEditing) {
+                body.bpla_id = bplaIdForConfig;
+            }
+            
+            // Шаг 4: Определяем URL и метод для отправки
+            const url = isEditing ? `/api/workshop/${editBoardId}` : '/api/board';
+            const method = isEditing ? 'PUT' : 'POST';
+
+            // Шаг 5: Отправляем запрос
+            const saveRes = await fetch(url, {
+                method: method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+
+            if (!saveRes.ok) {
+                const errorText = await saveRes.text();
+                throw new Error(`Ошибка сохранения на сервере: ${errorText}`);
+            }
+            
+            // Шаг 6: В случае успеха закрываем окно и обновляем таблицу
             modal.style.display = 'none';
+            editBoardId = null; // Сбрасываем ID
             await loadAndRenderTable();
-        } catch (error) { alert('Ошибка сохранения.'); }
+
+        } catch (err) {
+            console.error("Ошибка при сохранении:", err);
+            alert(`Не удалось сохранить данные. ${err.message}`);
+        }
     }
 
     // --- 6. Прочая логика и обработчики ---
@@ -288,7 +324,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const res = await fetch(`/api/bpla/${currentBplaId}/workshop-config`);
             if (!res.ok) throw new Error('Конфигурация не найдена');
             currentConfig = await res.json();
-            await updateUiForBplaType();
+            await updateUiForBplaType(); // await здесь важен!
             await loadAndRenderTable();
         } catch (error) { console.error("Не удалось загрузить конфигурацию:", error); }
     }
@@ -332,52 +368,89 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     function initCommentEditor() {
-        tableBody.addEventListener('mouseover', e => { const cell = e.target.closest('.parameter-cell'); 
+        // --- Обработчики для всплывающей подсказки (tooltip) ---
+        tableBody.addEventListener('mouseover', e => { 
+            const cell = e.target.closest('.parameter-cell');
             if (cell && cell.dataset.comment) { 
-                tooltip.textContent = cell.dataset.comment; tooltip.style.display = 'block'; 
+                tooltip.textContent = cell.dataset.comment; 
+                tooltip.style.display = 'block'; 
             } 
         }); 
-        tableBody.addEventListener('mousemove', e => { tooltip.style.left = `${e.pageX + 15}px`; tooltip.style.top = `${e.pageY + 15}px`; }); 
-        tableBody.addEventListener('mouseout', () => { tooltip.style.display = 'none'; });
+        tableBody.addEventListener('mousemove', e => { 
+            tooltip.style.left = `${e.pageX + 15}px`; 
+            tooltip.style.top = `${e.pageY + 15}px`; 
+        }); 
+        tableBody.addEventListener('mouseout', () => { 
+            tooltip.style.display = 'none'; 
+        });
 
+        // --- Логика модального окна комментариев ---
         let currentCommentData = {};
+        
         tableBody.addEventListener('click', e => {
+            // Ищем клик именно по кнопке редактирования комментария
             if (e.target.classList.contains('edit-comment-btn')) {
                 const button = e.target;
                 const boardId = button.dataset.boardId;
                 const board = boardsData.find(b => b.id == boardId);
                 if (!board) return;
-                currentCommentData = { boardId, paramName: button.dataset.paramName };
+
+                // Сохраняем контекст для отправки на сервер
+                currentCommentData = {
+                    boardId: boardId,
+                    paramName: button.dataset.paramName
+                };
+
+                // Заполняем модальное окно данными
                 document.getElementById('commentParamName').textContent = button.dataset.paramLabel;
-                document.getElementById('commentTextarea').value = button.closest('.parameter-cell').dataset.comment;
                 
-                // ИЗМЕНЕНИЕ №1: Читаем статус из нового JSONB-поля
+                // ИЗМЕНЕНИЕ: Используем `workshop_comments` для получения текста
+                document.getElementById('commentTextarea').value = (board.workshop_comments && board.workshop_comments[button.dataset.paramName]) || '';
+                
+                // ИЗМЕНЕНИЕ: Используем `workshop_status` для проверки статуса
                 document.getElementById('semiFinishedSwitch').checked = (board.workshop_status === 'semifinished');
                 
                 commentModal.style.display = 'flex';
             }
         });
 
-        const saveComment = async (commentText, isSemiFinished) => {
-        try {
-            // Запрос 1: ОБНОВЛЯЕМ СТАТУС через новый, отдельный API
-            await fetch(`/api/board/${currentCommentData.boardId}/set-semifinished`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    department: 'workshop', // в electrical.js будет 'electrical'
-                    is_semi_finished: isSemiFinished
-                })
-            });
-                if (!res.ok) throw new Error('Ошибка сохранения');
+        const saveOrDeleteComment = async (isDelete = false) => {
+            const { boardId, paramName } = currentCommentData;
+            if (!boardId || !paramName) return;
+
+            const commentText = isDelete ? '' : document.getElementById('commentTextarea').value;
+            const isSemiFinished = document.getElementById('semiFinishedSwitch').checked;
+
+            try {
+                const response = await fetch(`/api/workshop/${boardId}/comment`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        // ИЗМЕНЕНИЕ: Указываем правильный отдел
+                        department: 'workshop', 
+                        parameter: paramName,
+                        comment: commentText,
+                        is_semi_finished: isSemiFinished
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`Ошибка на сервере: ${errorText}`);
+                }
+
                 commentModal.style.display = 'none';
                 await loadAndRenderTable();
-            } catch (error) { alert('Не удалось обработать комментарий.'); }
+            } catch (error) {
+                console.error('Ошибка при сохранении комментария:', error);
+                alert(`Не удалось сохранить комментарий. Детали в консоли (F12).`);
+            }
         };
-
+        
+        // Привязываем события к кнопкам модального окна
         document.getElementById('closeCommentModal').onclick = () => commentModal.style.display = 'none';
-        document.getElementById('saveCommentBtn').onclick = () => saveComment(document.getElementById('commentTextarea').value, document.getElementById('semiFinishedSwitch').checked);
-        document.getElementById('deleteCommentBtn').onclick = () => saveComment('', document.getElementById('semiFinishedSwitch').checked);
+        document.getElementById('saveCommentBtn').onclick = () => saveOrDeleteComment(false);
+        document.getElementById('deleteCommentBtn').onclick = () => saveOrDeleteComment(true);
     }
 
 
@@ -385,34 +458,44 @@ document.addEventListener("DOMContentLoaded", () => {
     async function init() {
         await Promise.all([loadBplaTypes(), loadSuppliers()]);
         bplaSelector.addEventListener('change', onBplaTypeChange);
-        form.addEventListener('submit', onFormSubmit);
-        openModalBtn.addEventListener('click', () => openModal());
-        closeModalBtn.addEventListener('click', () => modal.style.display = 'none');
-        window.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
-        modalBplaSelector.addEventListener('change', async (e) => {
-            const bplaId = e.target.value;
-            let configToRender = {}; // По умолчанию пустая конфигурация
-
-            if (bplaId) {
-                try {
-                    const res = await fetch(`/api/bpla/${bplaId}/workshop-config`);
-                    if (!res.ok) throw new Error('Конфигурация не найдена');
-                    configToRender = await res.json();
-                } catch (err) {
-                    console.error("Не удалось загрузить параметры в модальном окне:", err);
-                    modalParamsFieldset.innerHTML = '<legend>Ошибка</legend><p>Не удалось загрузить параметры.</p>';
-                    return; // Выходим, чтобы не рендерить пустые поля при ошибке
-                }
-            }
-            // Отрисовываем параметры для выбранного типа (или пустые, если тип не выбран)
-            renderModalParams(configToRender, {});
-        });
-
-        // Запуск начальной загрузки данных
         if (bplaSelector.options.length > 0) {
-            bplaSelector.selectedIndex = 0;
             await onBplaTypeChange();
         }
+        
+        const debounce = (func, delay = 350) => {
+            let timeout;
+            return (...args) => { clearTimeout(timeout); timeout = setTimeout(() => func.apply(this, args), delay); };
+        };
+        const debouncedFilter = debounce(loadAndRenderTable);
+
+        filterForm.addEventListener('input', e => {
+            if (e.target.matches('#numberFilter')) {
+                debouncedFilter();
+            }
+        });
+        filterForm.addEventListener('change', e => {
+            if (e.target.matches('#supplierFilter, #statusFilter, .live-filter')) {
+                loadAndRenderTable();
+            }
+        });
+        filterForm.addEventListener('click', e => {
+            if (e.target.id === 'resetFilterBtn') {
+                filterForm.reset();
+                loadAndRenderTable();
+            }
+        });
+        
+        const handleCloseModal = () => {
+            modal.style.display = 'none';
+            editBoardId = null;
+        };
+        openModalBtn.addEventListener('click', () => openModal(null));
+        closeModalBtn.addEventListener('click', handleCloseModal);
+        window.addEventListener('click', (event) => {
+            if (event.target === modal) handleCloseModal();
+        });
+        form.addEventListener('submit', onFormSubmit);
+        
         initCommentEditor();
     }
 
