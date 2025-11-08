@@ -108,7 +108,10 @@ document.addEventListener("DOMContentLoaded", () => {
             filterHtml += `</div></fieldset>`;
         }
         filterHtml += `<fieldset class="checkbox-fieldset"><legend>Параметры</legend><div class="checkbox-group params-filter-group">`;
-        for (const key in currentConfig.params) { filterHtml += `<label><input type="checkbox" data-param-name="${key}" class="live-filter" /> ${currentConfig.params[key]}</label>`; }
+        for (const key in currentConfig.params) { 
+            // ИСПРАВЛЕНО: Добавлен id="filter_${key}", чтобы getFilters мог его найти
+            filterHtml += `<label><input type="checkbox" id="filter_${key}" data-param-name="${key}" class="live-filter" /> ${currentConfig.params[key]}</label>`; 
+        }
         filterHtml += `</div></fieldset><div class="filter-actions"><button type="button" id="resetFilterBtn">Сбросить</button></div>`;
         filterForm.innerHTML = filterHtml;
         
@@ -239,7 +242,7 @@ document.addEventListener("DOMContentLoaded", () => {
     
     async function onFormSubmit(e) {
         e.preventDefault(); // Предотвращаем стандартное поведение формы
-
+        
         // Определяем, в каком режиме мы работаем: создание или редактирование
         const isEditing = !!editBoardId;
         
@@ -289,7 +292,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             
             // Шаг 4: Определяем URL и метод для отправки
-            const url = isEditing ? `/api/workshop/${editBoardId}` : '/api/board';
+            const url = isEditing ? `/api/workshop/${editBoardId}` : '/api/add_board';
             const method = isEditing ? 'PUT' : 'POST';
 
             // Шаг 5: Отправляем запрос
@@ -312,6 +315,30 @@ document.addEventListener("DOMContentLoaded", () => {
         } catch (err) {
             console.error("Ошибка при сохранении:", err);
             alert(`Не удалось сохранить данные. ${err.message}`);
+        }
+    }
+
+    async function onModalBplaChange() {
+        const bplaId = modalBplaSelector.value;
+        
+        if (!bplaId) {
+            // Если выбрали "-- Выберите тип --", возвращаем плейсхолдер
+            modalParamsFieldset.innerHTML = '<legend>Параметры</legend><p>Сначала выберите тип БПЛА.</p>';
+            return;
+        }
+
+        try {
+            // Загружаем конфигурацию для выбранного БПЛА
+            const res = await fetch(`/api/bpla/${bplaId}/workshop-config`);
+            if (!res.ok) throw new Error('Конфигурация не найдена');
+            const config = await res.json();
+
+            // Рендерим параметры, передавая пустой объект {} в качестве "сохраненных"
+            renderModalParams(config, {});
+
+        } catch (err) {
+            console.error('Ошибка загрузки параметров для модального окна:', err);
+            modalParamsFieldset.innerHTML = '<legend>Параметры</legend><p>Не удалось загрузить конфигурацию. Попробуйте еще раз.</p>';
         }
     }
 
@@ -343,22 +370,26 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     tableBody.addEventListener('click', async (e) => {
-    const editButton = e.target.closest('.edit-btn');
-    if (editButton) {
-        openModal(parseInt(editButton.dataset.boardId, 10));
-        return; // Выходим, чтобы не обрабатывать другие клики
-    }
+        const editButton = e.target.closest('.edit-btn');
+        if (editButton) {
+            openModal(parseInt(editButton.dataset.boardId, 10));
+            return;
+        }
 
-    const deleteButton = e.target.closest('.delete-btn');
+        const deleteButton = e.target.closest('.delete-btn');
         if (deleteButton) {
+            //
+            // ИСПРАВЛЕНИЕ: (ReferenceError)
+            //
+            const boardId = deleteButton.dataset.boardId;
             const boardToDelete = boardsData.find(b => b.id == boardId);
+            
             if (!boardToDelete) return;
             if (confirm(`Вы уверены, что хотите удалить борт № ${boardToDelete.number}?`)) {
                 try {
                     const res = await fetch(`/api/board/${boardId}`, { method: 'DELETE' });
                     if (!res.ok) throw new Error('Ошибка удаления на сервере');
-                    
-                    await loadAndRenderTable(); // Обновляем таблицу после успешного удаления
+                    await loadAndRenderTable();
                 } catch (error) {
                     console.error('Ошибка при удалении борта:', error);
                     alert('Не удалось удалить борт.');
@@ -366,6 +397,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         }
     });
+
 
     function initCommentEditor() {
         // --- Обработчики для всплывающей подсказки (tooltip) ---
@@ -457,6 +489,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // --- 7. Инициализация страницы ---
     async function init() {
         await Promise.all([loadBplaTypes(), loadSuppliers()]);
+        modalBplaSelector.addEventListener('change', onModalBplaChange);
         bplaSelector.addEventListener('change', onBplaTypeChange);
         if (bplaSelector.options.length > 0) {
             await onBplaTypeChange();

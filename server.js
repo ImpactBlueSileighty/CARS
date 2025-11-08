@@ -774,7 +774,7 @@ app.post('/api/workshop/:boardId/comment', async (req, res) => {
 });
 
 app.post('/api/workshop/filter', async (req, res) => {
-    const { bpla_id, status, number, supplier_id } = req.body;
+    const { bpla_id, status, number, supplier_id, engines, ...paramFilters } = req.body;
     if (!bpla_id) return res.status(400).json({ error: 'Не указан ID БПЛА' });
     
     try {
@@ -790,6 +790,7 @@ app.post('/api/workshop/filter', async (req, res) => {
             LEFT JOIN suppliers s ON b.supplier_id = s.id
             WHERE b.bpla_id = $1`;
         
+            
         if (status) {
             query += ` AND b.workshop_status = $${params.length + 1}`;
             params.push(status);
@@ -802,8 +803,27 @@ app.post('/api/workshop/filter', async (req, res) => {
             query += ` AND b.supplier_id = $${params.length + 1}`;
             params.push(supplier_id);
         }
+        if (Array.isArray(engines) && engines.length > 0) {
+            // Ищем точное совпадение значения 'dvs' в JSONB
+            query += ` AND b.workshop_params->>'dvs' = ANY($${params.length + 1}::text[])`;
+            params.push(engines);
+        }
+
+        // 2. Фильтр по параметрам (paramFilters)
+        for (const key in paramFilters) {
+            // Проверяем, что ключ принадлежит объекту и его значение true (галочка стоит)
+            if (Object.hasOwnProperty.call(paramFilters, key) && paramFilters[key] === true) {
+                // Ищем, где ключ в JSONB существует и не равен null
+                // (Аналогично тому, как это сделано в electrical/filter [cite: 170])
+                query += ` AND b.workshop_params->>'${key}' IS NOT NULL`;
+            }
+        }
         
-        query += ` ORDER BY CASE WHEN b.workshop_status = 'in_progress' THEN 1 WHEN b.workshop_status = 'finished' THEN 2 ELSE 3 END, b.creation_date DESC`;
+        query += ` ORDER BY CASE 
+                      WHEN b.workshop_status = 'in_progress' THEN 1 
+                      WHEN b.workshop_status = 'finished' THEN 2 
+                      WHEN b.workshop_status = 'semifinished' THEN 3 
+                   END, b.creation_date DESC`;
         const { rows } = await pool.query(query, params);
         res.json(rows);
     } catch (e) { 
@@ -843,65 +863,43 @@ app.put('/api/workshop/:id', async (req, res) => {
 });
 
 
-app.put('/api/workshop/:id', async (req, res) => {
-    const { id } = req.params;
-    // Получаем из тела запроса данные, специфичные для слесарного цеха
-    const { number, supplier_id, workshop_params } = req.body;
-    
-    const client = await pool.connect();
-    try {
-        // Используем транзакцию, чтобы оба запроса (UPDATE и пересчет) выполнились как единое целое
-        await client.query('BEGIN');
-
-        await client.query(
-            'UPDATE boards SET number = $1, supplier_id = $2, workshop_params = $3 WHERE id = $4',
-            [number, supplier_id, workshop_params, id]
-        );
-        
-        // КЛЮЧЕВОЕ ИЗМЕНЕНИЕ:
-        // Создаем объект со свежими данными, которые мы только что получили.
-        const newData = { params: workshop_params };
-        
-        // Передаем эти свежие данные напрямую в функцию пересчета.
-        // Теперь ей не нужно снова читать из базы, что гарантирует правильный результат.
-        await recalculateBoardStatus(id, 'workshop', client, newData);
-
-        await client.query('COMMIT'); // Фиксируем изменения
-        res.sendStatus(200);
-
-    } catch (e) {
-        await client.query('ROLLBACK'); // Откатываем изменения в случае любой ошибки
-        console.error("Ошибка обновления (workshop):", e);
-        res.status(500).json({error: "Server error"});
-    } finally {
-        client.release(); // Всегда возвращаем соединение в пул
-    }
-});
-
 // API для обновления параметра (галочки) в цеху
 app.patch('/api/workshop/:id/parameter', async (req, res) => {
     const { id } = req.params;
     const { parameter, value } = req.body;
-    if (!parameter) return res.status(400).json({ error: 'Имя параметра не указано' });
+
+    if (!parameter) {
+        return res.status(400).json({ error: 'Имя параметра не указано' });
+    }
 
     const client = await pool.connect();
-    try {
+    try 
+{
         await client.query('BEGIN');
+
+        // Обновляем дату для конкретного параметра в JSONB-поле workshop_params
         await client.query(
-            `UPDATE boards SET workshop_params = jsonb_set(COALESCE(workshop_params, '{}'::jsonb), '{${parameter}}', to_jsonb($1::text), true) WHERE id = $2`,
-            [value, id]
+            `UPDATE boards 
+             SET workshop_params = jsonb_set(
+                 COALESCE(workshop_params, '{}'::jsonb), 
+                 '{${parameter}}', 
+                 -- ИСПРАВЛЕНО: COALESCE гарантирует, что SQL NULL станет JSON null
+                 COALESCE(to_jsonb($1::text), 'null'::jsonb),
+                 true
+             ) 
+             WHERE id = $2`,
+            [value, id] // 
         );
-        
-        // ИСПРАВЛЕНИЕ "ГОНКИ СОСТОЯНИЙ": Вызываем пересчет после изменения.
+    // После обновления параметра СРАЗУ ЖЕ ПЕРЕСЧИТЫВАЕМ СТАТУС "ГОТОВ"
         await recalculateBoardStatus(id, 'workshop', client);
-        
-        await client.query('COMMIT');
+    await client.query('COMMIT');
         res.sendStatus(200);
+
     } catch (err) {
         await client.query('ROLLBACK');
-        console.error('Ошибка обновления параметра (workshop):', err);
+    console.error('Ошибка обновления параметра (workshop):', err);
         res.status(500).json({ error: 'Ошибка сервера' });
-    } finally {
+} finally {
         client.release();
     }
 });
@@ -938,19 +936,13 @@ app.patch('/api/electrical/:id/parameter', async (req, res) => {
     }
 });
 
-/**
- * Пересчитывает статус борта для конкретного отдела.
- * Статус становится 'finished', если все параметры из конфигурации заполнены.
- * Важно: не трогает статус 'semifinished'.
- * @param {number} boardId ID борта
- * @param {'workshop' | 'electrical' | 'setup'} department Отдел
- * @param {object} client Активное подключение к БД
- */
 async function recalculateBoardStatus(boardId, department, client, boardData = null) {
     try {
+        // --- Логирование: Начало ---
+        console.log(`\n--- RECALCULATE (Board: ${boardId}, Dept: ${department}) ---`);
+        // -------------------------
+
         let board = boardData;
-        
-        // Если свежие данные не переданы, загружаем их из базы.
         if (!board) {
             const boardRes = await client.query(
                 `SELECT controller_id, ${department}_params AS params FROM boards WHERE id = $1`,
@@ -970,23 +962,27 @@ async function recalculateBoardStatus(boardId, department, client, boardData = n
 
         const requiredParams = Object.keys(config.params);
         const currentParams = board.params || {};
-        const allComponentsSet = requiredParams.every(key => currentParams[key] != null && String(currentParams[key]).trim() !== '');
+        const allComponentsSet = requiredParams.every(key => 
+            currentParams[key] != null && String(currentParams[key]).trim() !== ''
+        );
         
         let isReady = allComponentsSet;
-
-        // --- КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ ---
-        // Добавляем специфичные проверки для КАЖДОГО цеха.
         if (department === 'electrical') {
             const controllerIsSet = board.controller_id != null;
             isReady = allComponentsSet && controllerIsSet;
-        } else if (department === 'workshop') {
-            // ПРОВЕРКА ДЛЯ СЛЕСАРНОГО ЦЕХА: Двигатель (ДВС) должен быть выбран.
-            const dvsIsSet = currentParams.dvs != null && String(currentParams.dvs).trim() !== '';
-            isReady = allComponentsSet && dvsIsSet;
         }
 
         const newStatus = isReady ? 'finished' : 'in_progress';
         const statusColumn = `${department}_status`;
+
+        // --- Логирование: Результаты ---
+        console.log(`Required Keys (from Config):`, requiredParams);
+        console.log(`Current Params (from Board):`, currentParams);
+        console.log(`Check Result (allComponentsSet):`, allComponentsSet);
+        console.log(`Final Decision (isReady):`, isReady);
+        console.log(`New Status:`, newStatus);
+        console.log(`--- END RECALCULATE ---\n`);
+        // -----------------------------
 
         await client.query(
             `UPDATE boards SET ${statusColumn} = $1 WHERE id = $2 AND ${statusColumn} != 'semifinished'`,
