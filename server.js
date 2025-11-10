@@ -244,8 +244,7 @@ app.get('/api/board/:id', async (req, res) => {
 // Добавить новую запись с фото
 app.post('/api/add_board', async (req, res) => {
   try {
-    // 1. Принимаем все возможные параметры
-    const { bpla_id, number, supplier_id, controller_id, workshop_params, electrical_params } = req.body;
+    const { bpla_id, number, supplier_id, controller_id, workshop_params, electrical_params, setup_params } = req.body;
 
     if (!number || number.trim() === '') {
         return res.status(400).json({ error: 'Номер борта является обязательным полем.' });
@@ -253,11 +252,11 @@ app.post('/api/add_board', async (req, res) => {
     
     // 2. Универсальная SQL-команда для вставки
     const result = await pool.query(
-      `INSERT INTO boards (bpla_id, number, supplier_id, controller_id, workshop_params, electrical_params, creation_date) 
-       VALUES ($1, $2, $3, $4, $5, $6, NOW()) 
+      `INSERT INTO boards (bpla_id, number, supplier_id, controller_id, 
+       workshop_params, electrical_params, setup_params, creation_date) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) 
        RETURNING *`,
-      // Если какой-то параметр не пришел, он вставится как NULL
-      [bpla_id, number, supplier_id, controller_id || null, workshop_params || null, electrical_params || null]
+      [bpla_id, number, supplier_id, controller_id || null, workshop_params || null, electrical_params || null, setup_params || null]
     );
 
     const newBoard = result.rows[0];
@@ -305,90 +304,6 @@ app.put('/api/board/:id', async (req, res) => {
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
-
-
-
-// Фильтрация с POST-запросом
-app.post('/api/boards/filter', async (req, res) => {
-  const { 
-      number, controller_id, date_from, date_to, bpla_id,
-      traction, angle, acceleration, osd, osd_configured, plugs, engine_start,
-      status 
-  } = req.body;
-
-  const finishedCondition = `(
-      b.traction_date IS NOT NULL AND b.angle_date IS NOT NULL AND 
-      b.acceleration_date IS NOT NULL AND b.osd_date IS NOT NULL AND 
-      b.osd_configured_date IS NOT NULL AND b.plugs_date IS NOT NULL AND 
-      b.engine_start_date IS NOT NULL
-  )`;
-
-  let query = `
-      SELECT b.*, c.name AS controller_name, bp.name AS bpla_name, s.name AS supplier_name
-      FROM boards b
-      LEFT JOIN controller c ON b.controller_id = c.id
-      LEFT JOIN bpla bp ON b.bpla_id = bp.id
-      LEFT JOIN suppliers s ON b.supplier_id = s.id
-      WHERE TRUE`;
-  const params = []
-
-  // Основные фильтры (поиск, контроллер, даты, тип БПЛА)
-  if (bpla_id) {
-    try {
-        const children = await pool.query('SELECT id FROM bpla WHERE parent_id = $1', [bpla_id]);
-        const childIds = children.rows.map(r => r.id);
-        const allIds = [bpla_id, ...childIds];
-        params.push(allIds);
-        query += ` AND b.bpla_id = ANY($${params.length}::int[])`;
-    } catch (e) {
-        console.error("Ошибка при поиске дочерних БПЛА:", e);
-    }
-  }
-  if (number) {
-    params.push(`%${number.trim().toLowerCase()}%`);
-    query += ` AND LOWER(TRIM(b.number)) ILIKE $${params.length}`;
-  }
-  if (controller_id) {
-    params.push(controller_id);
-    query += ` AND b.controller_id = $${params.length}`;
-  }
-  if (date_from) {
-    params.push(date_from);
-    query += ` AND b.finished_date >= $${params.length}`;
-  }
-  if (date_to) {
-    params.push(date_to);
-    query += ` AND b.finished_date <= $${params.length}`;
-  }
-
-  // 3. Логика фильтрации по статусу и параметрам
-  // Фильтр по общему статусу ("Готовые" / "В работе") имеет приоритет
-  if (status === 'finished') {
-      query += ` AND ${finishedCondition}`;
-  } else if (status === 'in_progress') {
-      query += ` AND NOT ${finishedCondition}`;
-  } else {
-      if (traction) query += ` AND b.traction_date IS NOT NULL`;
-      if (angle) query += ` AND b.angle_date IS NOT NULL`;
-      if (acceleration) query += ` AND b.acceleration_date IS NOT NULL`;
-      if (osd) query += ` AND b.osd_date IS NOT NULL`;
-      if (osd_configured) query += ` AND b.osd_configured_date IS NOT NULL`;
-      if (plugs) query += ` AND b.plugs_date IS NOT NULL`;
-      if (engine_start) query += ` AND b.engine_start_date IS NOT NULL`;
-  }
-
-  query += " ORDER BY string_to_array(b.number, '.')::int[] ASC";
-
-  try {
-    const result = await pool.query(query, params);
-    res.json(result.rows);
-  } catch (err) {
-    console.error('Ошибка фильтрации:', err);
-    res.status(500).json({ error: 'Ошибка фильтрации' });
-  }
-});
-
-
 
 app.put('/api/board/:id/photo', upload.single('photo'), async (req, res) => {
   const { id } = req.params;
@@ -773,6 +688,56 @@ app.post('/api/workshop/:boardId/comment', async (req, res) => {
     }
 });
 
+app.post('/api/setup/:boardId/comment', async (req, res) => {
+    const { boardId } = req.params;
+    const { parameter, comment, is_semi_finished } = req.body;
+    const department = 'setup'; // Жестко задаем отдел
+
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        const commentColumn = `${department}_comments`;
+        
+        // Логика сохранения/удаления комментария (она у вас правильная)
+        if (comment && comment.trim() !== '') {
+            await client.query(
+                `UPDATE boards SET ${commentColumn} = jsonb_set(COALESCE(${commentColumn}, '{}'::jsonb), '{${parameter}}', to_jsonb($1::text), true) WHERE id = $2`,
+                [comment, boardId]
+            );
+        } else {
+            await client.query(
+                `UPDATE boards SET ${commentColumn} = ${commentColumn} - $1 WHERE id = $2 AND ${commentColumn} ? $1`,
+                [parameter, boardId]
+            );
+        }
+        
+        const statusColumn = `${department}_status`;
+        
+        // --- ВОТ ИСПРАВЛЕНИЕ ---
+        if (is_semi_finished) {
+            // Если галочка ПОСТАВЛЕНА - ставим 'semifinished'
+            await client.query(`UPDATE boards SET ${statusColumn} = 'semifinished' WHERE id = $1`, [boardId]);
+        } else {
+            // Если галочка СНЯТА:
+            // 1. Сначала принудительно "разблокируем" статус [cite: 111]
+            await client.query(`UPDATE boards SET ${statusColumn} = 'in_progress' WHERE id = $1`, [boardId]);
+            
+            // 2. Теперь пересчитываем (он сможет стать 'finished', если все галочки стоят) [cite: 112]
+            await recalculateBoardStatus(boardId, department, client);
+        }
+        // --- КОНЕЦ ИСПРАВЛЕНИЯ ---
+
+        await client.query('COMMIT');
+        res.sendStatus(200);
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('Ошибка сохранения комментария/статуса (setup):', err);
+        res.status(500).json({ error: 'Внутренняя ошибка сервера' });
+    } finally {
+        client.release();
+    }
+});
+
 app.post('/api/workshop/filter', async (req, res) => {
     const { bpla_id, status, number, supplier_id, engines, ...paramFilters } = req.body;
     if (!bpla_id) return res.status(400).json({ error: 'Не указан ID БПЛА' });
@@ -933,6 +898,42 @@ app.patch('/api/electrical/:id/parameter', async (req, res) => {
     } catch (err) {
         console.error('Ошибка обновления параметра (электромонтаж):', err);
         res.status(500).json({ error: 'Ошибка сервера' });
+    }
+});
+
+app.patch('/api/setup/:id/parameter', async (req, res) => {
+    const { id } = req.params;
+    const { parameter, value } = req.body;
+
+    if (!parameter) {
+        return res.status(400).json({ error: 'Имя параметра не указано' });
+    }
+
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        await client.query(
+            `UPDATE boards 
+             SET setup_params = jsonb_set(
+                 COALESCE(setup_params, '{}'::jsonb), 
+                 '{${parameter}}', 
+                 COALESCE(to_jsonb($1::text), 'null'::jsonb),
+                 true
+             ) 
+             WHERE id = $2`,
+            [value, id]
+        );
+        
+        await recalculateBoardStatus(id, 'setup', client);
+        
+        await client.query('COMMIT');
+        res.sendStatus(200);
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('Ошибка обновления параметра (setup):', err);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    } finally {
+        client.release();
     }
 });
 
@@ -1120,6 +1121,58 @@ app.post('/api/electrical/filter', async (req, res) => {
     }
 });
 
+app.post('/api/setup/filter', async (req, res) => {
+    const { bpla_id, status, number, supplier_id, ...paramFilters } = req.body;
+
+    if (!bpla_id) {
+        return res.status(400).json({ error: 'Не указан ID БПЛА' });
+    }
+    
+    try {
+        const params = [bpla_id];
+        let query = `
+            SELECT b.*, s.name as supplier_name,
+                   CASE 
+                       WHEN b.setup_status = 'semifinished' THEN 'red'
+                       WHEN b.setup_status = 'finished' THEN 'green'
+                       ELSE 'orange' -- 'in_progress'
+                   END as status_color
+            FROM boards b
+            LEFT JOIN suppliers s ON b.supplier_id = s.id
+            WHERE b.bpla_id = $1`;
+        
+        // --- Стандартные фильтры ---
+        if (status) {
+            query += ` AND b.setup_status = $${params.length + 1}`;
+            params.push(status);
+        }
+        if (number && number.trim() !== '') {
+            query += ` AND b.number ILIKE $${params.length + 1}`;
+            params.push(`%${number.trim()}%`);
+        }
+        if (supplier_id) {
+            query += ` AND b.supplier_id = $${params.length + 1}`;
+            params.push(supplier_id);
+        }
+
+        // --- Фильтр по параметрам (paramFilters) ---
+        for (const key in paramFilters) {
+            if (Object.hasOwnProperty.call(paramFilters, key) && paramFilters[key] === true) {
+                query += ` AND b.setup_params->>'${key}' IS NOT NULL`;
+            }
+        }
+        
+        query += ` ORDER BY CASE WHEN b.setup_status = 'in_progress' THEN 1 WHEN b.setup_status = 'finished' THEN 2 ELSE 3 END, b.creation_date DESC`;
+
+        const { rows } = await pool.query(query, params);
+        res.json(rows);
+
+    } catch (e) { 
+        console.error("Ошибка фильтрации (setup):", e);
+        res.status(500).json({error: "Ошибка на сервере"}); 
+    }
+});
+
 app.put('/api/electrical/:id', async (req, res) => {
     const { id } = req.params;
     const { number, supplier_id, controller_id, electrical_params } = req.body;
@@ -1138,6 +1191,33 @@ app.put('/api/electrical/:id', async (req, res) => {
         res.sendStatus(200);
     } catch (e) {
         console.error("Ошибка обновления (электромонтаж):", e);
+        res.status(500).json({error: "Server error"});
+    } finally {
+        client.release();
+    }
+});
+
+app.put('/api/setup/:id', async (req, res) => {
+    const { id } = req.params;
+    const { number, supplier_id, setup_params } = req.body;
+    
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        await client.query(
+            'UPDATE boards SET number = $1, supplier_id = $2, setup_params = $3 WHERE id = $4',
+            [number, supplier_id, setup_params, id]
+        );
+        
+        // Передаем свежие данные напрямую
+        const newData = { params: setup_params };
+        await recalculateBoardStatus(id, 'setup', client, newData);
+        
+        await client.query('COMMIT');
+        res.sendStatus(200);
+    } catch (e) {
+        await client.query('ROLLBACK');
+        console.error("Ошибка обновления (setup):", e);
         res.status(500).json({error: "Server error"});
     } finally {
         client.release();
@@ -1166,6 +1246,20 @@ app.get('/api/bpla/:id/electrical-config', async (req, res) => {
         return res.status(404).json({ error: 'Конфигурация не найдена' });
     }
     res.json(rows[0].electrical_config);
+});
+
+app.get('/api/bpla/:id/setup-config', async (req, res) => {
+    const { id } = req.params;
+    try {
+        const result = await pool.query('SELECT setup_config FROM bpla WHERE id = $1', [id]);
+        if (result.rows.length === 0 || !result.rows[0].setup_config) {
+            return res.status(404).json({ error: 'Конфигурация не найдена' });
+        }
+        res.json(result.rows[0].setup_config);
+    } catch (err) {
+        console.error('Ошибка получения конфигурации цеха настройки:', err);
+        res.status(500).json({ error: 'Внутренняя ошибка сервера' });
+    }
 });
 
 app.patch('/api/board/:id/status', async (req, res) => {

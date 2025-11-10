@@ -48,9 +48,9 @@ h1 {
 }
 
 .page-controls {
-    display: flex;          /* Превращаем контейнер в flex-контейнер */
+    display: flex;        /* Превращаем контейнер в flex-контейнер */
     align-items: center;    /* Выравниваем все дочерние элементы по центру по вертикали */
-    gap: 16px;              /* Добавляем аккуратный отступ между элементами */
+    gap: 16px;            /* Добавляем аккуратный отступ между элементами */
 }
 
 .page-header h1 {
@@ -300,8 +300,8 @@ tbody tr:hover { background-color: #f9fafb; }
 }
 
 /* --- Модальные окна --- */
-#addModal, .comment-editor-modal {
-    display: none;
+#addModal, .comment-editor-modal, .modal-overlay {
+    display: none; /* <-- ГЛАВНОЕ ИСПРАВЛЕНИЕ */
     position: fixed;
     top: 0; left: 0;
     width: 100%; height: 100%;
@@ -320,16 +320,7 @@ tbody tr:hover { background-color: #f9fafb; }
     flex-direction: column;
 }
 .modal-content { max-width: 500px; max-height: 95vh; }
-.modal-overlay {
-    position: fixed;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    background: rgba(0,0,0,0.5);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 1000;
-}
+
 .comment-editor-content { max-width: 400px; padding: 20px; }
 #addModal h3, .comment-editor-content h4 {
     padding: 16px 24px;
@@ -393,7 +384,7 @@ tbody tr:hover { background-color: #f9fafb; }
     vertical-align: middle;
 
     /* --- НОВЫЕ СТИЛИ ДЛЯ РАЗМЕРА И ВЫРАВНИВАНИЯ ТЕКСТА --- */
-    width: 140px;          /* ✨ Задаем фиксированную ширину */
+    width: 140px;        /* ✨ Задаем фиксированную ширину */
     text-align: right;     /* ✨ Выравниваем текст внутри поля по правому краю */
 }
 .param-date-input::-webkit-calendar-picker-indicator {
@@ -483,15 +474,36 @@ tbody tr:hover { background-color: #f9fafb; }
 }
 
 
-
-
 /* ==========================================================================
    4. Стили для конкретных блоков и страниц
    ========================================================================== */
 
-
-
-
+/* --- (НОВЫЙ БЛОК) Контейнер селектора БПЛА (для workshop, setup и т.д.) --- */
+.main-selector-container {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    padding: 1.25rem;
+    background-color: var(--white);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+}
+.main-selector-container label {
+    font-weight: 600;
+    font-size: 1rem;
+    color: var(--primary);
+    margin: 0;
+    flex-shrink: 0; /* Не сжиматься */
+}
+.main-selector-container select {
+    width: auto;
+    min-width: 300px;
+    font-weight: 500;
+}
+.main-selector-container button {
+    margin-left: auto; /* Отправляет кнопку вправо */
+}
 
 /* --- Страница входа (Login) --- */
 body.login-page { padding-left: 0; }
@@ -566,7 +578,18 @@ body.login-page { padding-left: 0; }
 .edit-comment-btn { position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; padding: 0; background: rgba(0, 0, 0, 0.05); border: none; border-radius: 50%; box-shadow: none; font-size: 14px; cursor: pointer; opacity: 0; transition: all 0.2s; display: flex; justify-content: center; align-items: center; line-height: 1; }
 .parameter-cell:hover .edit-comment-btn { opacity: 1; background: rgba(0, 0, 0, 0.1); }
 .edit-comment-btn:hover { background: var(--accent); color: white; transform: scale(1.1); }
-.comment-tooltip { position: fixed; background: #333; color: white; padding: 8px 12px; border-radius: 6px; font-size: 0.9rem; z-index: 1002; max-width: 300px; pointer-events: none; }
+#commentTooltip { /* ID вместо класса */
+    position: fixed; 
+    background: #333; 
+    color: white; 
+    padding: 8px 12px; 
+    border-radius: 6px; 
+    font-size: 0.9rem; 
+    z-index: 1002; 
+    max-width: 300px; 
+    pointer-events: none; 
+    display: none; /* Скрыт по умолчанию */
+}
 .comment-editor-actions { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 15px; }
 
 /* --- Цвета для строк таблицы --- */
