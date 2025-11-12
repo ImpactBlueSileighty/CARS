@@ -27,14 +27,12 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.post('/api/auth/login', async (req, res) => {
     const { login, password, rememberMe } = req.body;
     try {
-        // ИСПРАВЛЕНО: использует 'login'
+
         const { rows } = await pool.query('SELECT * FROM users WHERE login = $1', [login]);
         if (rows.length === 0) {
             return res.status(401).json({ error: 'Неверный логин или пароль' });
         }
         const user = rows[0];
-
-        // ИСПРАВЛЕНО: использует 'password_hash'
         const isMatch = await bcrypt.compare(password, user.password_hash);
         if (!isMatch) {
             return res.status(401).json({ error: 'Неверный логин или пароль' });
@@ -520,126 +518,6 @@ app.get('/summary.html', isAuthenticated, (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'summary.html'));
 });
 
-// --- ОБНОВЛЕННЫЙ МАРШРУТ ДЛЯ СТАТИСТИКИ ---
-app.get('/api/summary/statistics', async (req, res) => {
-    try {
-        const query = `
-            WITH board_statuses AS (
-                SELECT
-                    b.bpla_id,
-                    b.finished_date,
-                    b.is_fully_finished,
-                    CASE
-                        WHEN b.is_fully_finished = TRUE THEN 'green'
-                        WHEN (
-                            /*
-                             * Логика "красного" статуса, исправленная под вашу структуру БД.
-                             * Мы проверяем отдельный столбец для двигателя и заглядываем
-                             * внутрь JSONB-поля 'workshop_params' для остальных параметров.
-                             */
-                            (b.workshop_comments->>'engine_installation' IS NOT NULL AND b.engine_installation_date IS NULL) OR
-                            (b.workshop_comments->>'catapult_hooks' IS NOT NULL AND b.workshop_params->>'catapult_hooks' IS NULL) OR
-                            (b.workshop_comments->>'fuel_system' IS NOT NULL AND b.workshop_params->>'fuel_system' IS NULL) OR
-                            (b.workshop_comments->>'rods' IS NOT NULL AND b.workshop_params->>'rods' IS NULL) OR
-                            (b.workshop_comments->>'lead_weight' IS NOT NULL AND b.workshop_params->>'lead_weight' IS NULL)
-                        ) THEN 'red'
-                        ELSE 'orange'
-                    END as status_color
-                FROM boards b
-            )
-            SELECT 
-                bp.name as bpla_name,
-                COUNT(bs.bpla_id) FILTER (WHERE bs.status_color = 'green') as green,
-                COUNT(bs.bpla_id) FILTER (WHERE bs.status_color = 'green' AND bs.finished_date = CURRENT_DATE) as green_today,
-                COUNT(bs.bpla_id) FILTER (WHERE bs.status_color = 'red') as red,
-                COUNT(bs.bpla_id) FILTER (WHERE bs.status_color = 'orange') as orange
-            FROM board_statuses bs
-            LEFT JOIN bpla bp ON bs.bpla_id = bp.id
-            GROUP BY bp.name
-            ORDER BY bp.name;
-        `;
-        const { rows } = await pool.query(query);
-        res.json(rows);
-    } catch (err) {
-        console.error('Ошибка при получении статистики для сводки:', err);
-        res.status(500).json({ error: 'Ошибка на сервере' });
-    }
-});
-
-
-
-// --- ФИНАЛЬНЫЙ ИСПРАВЛЕННЫЙ МАРШРУТ ДЛЯ ФИЛЬТРАЦИИ ---
-app.post('/api/summary/filter', async (req, res) => {
-    const { number, supplier_id, bpla_id, status } = req.body;
-
-    let query = `
-        WITH board_statuses AS (
-            SELECT
-                b.*, 
-                s.name as supplier_name, 
-                bp.name as bpla_name,
-                CASE
-                    WHEN b.is_fully_finished = TRUE THEN 'green'
-                    WHEN (
-                        (b.workshop_comments->>'engine_installation' IS NOT NULL AND b.engine_installation_date IS NULL) OR
-                        (b.workshop_comments->>'catapult_hooks' IS NOT NULL AND b.workshop_params->>'catapult_hooks' IS NULL) OR
-                        (b.workshop_comments->>'fuel_system' IS NOT NULL AND b.workshop_params->>'fuel_system' IS NULL) OR
-                        (b.workshop_comments->>'rods' IS NOT NULL AND b.workshop_params->>'rods' IS NULL) OR
-                        (b.workshop_comments->>'lead_weight' IS NOT NULL AND b.workshop_params->>'lead_weight' IS NULL)
-                    ) THEN 'red'
-                    ELSE 'orange'
-                END as status_color
-            FROM boards b
-            LEFT JOIN suppliers s ON b.supplier_id = s.id
-            LEFT JOIN bpla bp ON b.bpla_id = bp.id
-        )
-        SELECT 
-            *,
-            (engine_installation_date IS NOT NULL AND 
-             workshop_params->>'catapult_hooks' IS NOT NULL AND 
-             workshop_params->>'fuel_system' IS NOT NULL AND 
-             workshop_params->>'rods' IS NOT NULL AND 
-             workshop_params->>'lead_weight' IS NOT NULL) as workshop_complete,
-            (traction_date IS NOT NULL AND angle_date IS NOT NULL AND acceleration_date IS NOT NULL AND osd_date IS NOT NULL AND osd_configured_date IS NOT NULL AND plugs_date IS NOT NULL AND engine_start_date IS NOT NULL) as setup_complete
-        FROM board_statuses
-        WHERE TRUE
-    `;
-    
-    const params = [];
-
-    if (number) { 
-        params.push(`%${number.trim().toLowerCase()}%`); 
-        query += ` AND LOWER(TRIM(number)) ILIKE $${params.length}`; 
-    }
-    if (supplier_id) { 
-        params.push(supplier_id); 
-        query += ` AND supplier_id = $${params.length}`; 
-    }
-    if (bpla_id) { 
-        params.push(bpla_id); 
-        // ИСПРАВЛЕНО: Убрали некорректный псевдоним 'b.'
-        query += ` AND bpla_id = $${params.length}`; 
-    }
-
-    if (status) {
-        if (status === 'finished') { query += ` AND status_color = 'green'`; } 
-        else if (status === 'overdue') { query += ` AND status_color = 'red'`; } 
-        else if (status === 'today') { query += ` AND status_color = 'orange' AND creation_date = CURRENT_DATE`; }
-    }
-    
-    query += ' ORDER BY is_fully_finished ASC, id DESC';
-
-    try {
-        const result = await pool.query(query, params);
-        res.json(result.rows);
-    } catch (err) {
-        // Эта ошибка теперь не должна появляться
-        console.error('Ошибка фильтрации для сводки:', err);
-        res.status(500).json({ error: 'Ошибка фильтрации' });
-    }
-});
-
-
 // API для обновления комментария и статуса ПФ
 app.post('/api/workshop/:boardId/comment', async (req, res) => {
     const { boardId } = req.params;
@@ -989,6 +867,46 @@ async function recalculateBoardStatus(boardId, department, client, boardData = n
             `UPDATE boards SET ${statusColumn} = $1 WHERE id = $2 AND ${statusColumn} != 'semifinished'`,
             [newStatus, boardId]
         );
+
+        try {
+            // Пере-запрашиваем ВСЕ статусы (т.к. мы только что обновили один из них)
+            const statusRes = await client.query(
+                `SELECT workshop_status, electrical_status, setup_status 
+                 FROM boards WHERE id = $1`,
+                [boardId]
+            );
+
+            if (statusRes.rows.length > 0) {
+                const statuses = statusRes.rows[0];
+                
+                // Проверяем, что все 3 цеха в статусе 'finished'
+                const isBoardFinished = (
+                    statuses.workshop_status === 'finished' &&
+                    statuses.electrical_status === 'finished' &&
+                    statuses.setup_status === 'finished'
+                );
+
+                if (isBoardFinished) {
+                    // БОРТ ГОТОВ: Устанавливаем finished_date (только если она не была установлена)
+                    await client.query(
+                        `UPDATE boards SET finished_date = CURRENT_DATE 
+                         WHERE id = $1 AND finished_date IS NULL`,
+                        [boardId]
+                    );
+                } else {
+                    // БОРТ НЕ ГОТОВ: (т.е. пользователь снял галочку)
+                    // Очищаем finished_date, чтобы он не считался готовым
+                    await client.query(
+                        `UPDATE boards SET finished_date = NULL 
+                         WHERE id = $1`,
+                        [boardId]
+                    );
+                }
+            }
+        } catch (err) {
+            console.error(`Ошибка при обновлении final finished_date для борта ${boardId}:`, err);
+            // Не прерываем выполнение, т.к. статус отдела уже обновлен
+        }
     } catch (err) {
         console.error(`Ошибка пересчета статуса для борта ${boardId} в цеху ${department}:`, err);
     }
@@ -1060,7 +978,6 @@ app.get('/api/electrical/components/:bplaId', async (req, res) => {
 // НАЙДИТЕ ЭТОТ ОБРАБОТЧИК В server.js И ПОЛНОСТЬЮ ЗАМЕНИТЕ ЕГО
 
 app.post('/api/electrical/filter', async (req, res) => {
-    // Используем rest-параметр для сбора всех чекбоксов компонентов
     const { bpla_id, status, number, supplier_id, ...componentFilters } = req.body;
 
     if (!bpla_id) {
@@ -1315,6 +1232,319 @@ app.patch('/api/board/:id/semifinished', async (req, res) => {
     console.error('Ошибка обновления параметров ПФ:', err);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
+});
+
+
+// ===================================================
+// API ДЛЯ СВОДКИ (SUMMARY)
+// ===================================================
+
+/**
+ * Эндпоинт для главной статистики.
+ * (ИСПРАВЛЕНО: использует новую логику статусов)
+ */
+app.get('/api/summary/statistics', async (req, res) => {
+    try {
+        const query = `
+            WITH board_data AS (
+                SELECT
+                    b.supplier_id,
+                    
+                    -- НОВАЯ ЛОГИКА "ГОТОВ"
+                    CASE
+                        WHEN b.workshop_status = 'finished' 
+                             AND b.electrical_status = 'finished' 
+                             AND b.setup_status = 'finished'
+                        THEN TRUE ELSE FALSE
+                    END as is_fully_finished,
+                    
+                    -- НОВАЯ ЛОГИКА "ПОЛУФАБРИКАТ"
+                    CASE
+                        WHEN b.workshop_status = 'semifinished' 
+                             OR b.electrical_status = 'semifinished' 
+                             OR b.setup_status = 'semifinished'
+                        THEN TRUE ELSE FALSE
+                    END as is_semifinished,
+
+                    -- (ПРИМЕЧАНИЕ: Мы предполагаем, что у вас есть некая общая
+                    -- колонка 'finished_date' для подсчета "Готовых СЕГОДНЯ".
+                    -- Если ее нет, счетчик "Сегодня" всегда будет 0.)
+                    b.finished_date
+                FROM boards b
+            )
+            SELECT 
+                COALESCE(s.name, 'Не указан') as supplier_name,
+                
+                -- СКОЛЬКО ГОТОВО (Всего)
+                COUNT(*) FILTER (
+                    WHERE bd.is_fully_finished = TRUE
+                ) as total_finished,
+                
+                -- СКОЛЬКО ГОТОВО (Сегодня)
+                COUNT(*) FILTER (
+                    WHERE bd.is_fully_finished = TRUE AND bd.finished_date = CURRENT_DATE
+                ) as today_finished,
+                
+                -- СКОЛЬКО В РАБОТЕ (Всего)
+                COUNT(*) FILTER (
+                    WHERE bd.is_fully_finished = FALSE AND bd.is_semifinished = FALSE
+                ) as total_in_progress,
+                
+                -- СКОЛЬКО ПОЛУФАБРИКАТЫ (Всего)
+                COUNT(*) FILTER (
+                    WHERE bd.is_semifinished = TRUE
+                ) as total_semifinished
+                
+            FROM board_data bd
+            LEFT JOIN suppliers s ON bd.supplier_id = s.id
+            GROUP BY s.name
+            ORDER BY supplier_name;
+        `;
+        const { rows } = await pool.query(query);
+        res.json(rows);
+    } catch (err) {
+        console.error('Ошибка получения статистики для сводки:', err);
+        res.status(500).json({ error: 'Ошибка на сервере' });
+    }
+});
+
+app.post('/api/summary/board-tracker', async (req, res) => {
+    const { number, supplier_id, bpla_id } = req.body;
+    
+    let query = `
+        SELECT 
+            b.id,
+            b.number,
+            bp.name as bpla_name,
+            s.name as supplier_name,
+            b.creation_date,
+            
+            -- ИСПРАВЛЕНА ЛОГИКА ОПРЕДЕЛЕНИЯ МЕСТОПОЛОЖЕНИЯ БОРТА
+            CASE
+                -- Приоритет №1: Полуфабрикат (ПФ)
+                WHEN b.workshop_status = 'semifinished' THEN 'Полуфабрикат (Слесарный цех)'
+                WHEN b.electrical_status = 'semifinished' THEN 'Полуфабрикат (Электромонтаж)'
+                WHEN b.setup_status = 'semifinished' THEN 'Полуфабрикат (Отдел Настройки)'
+                
+                -- Приоритет №2: В работе (по порядку)
+                WHEN b.workshop_status != 'finished' THEN 'В работе (Слесарный цех)'
+                WHEN b.electrical_status != 'finished' THEN 'В работе (Электромонтаж)'
+                WHEN b.setup_status != 'finished' THEN 'В работе (Отдел Настройки)'
+                
+                ELSE 'Ошибка статуса'
+            END as location,
+            
+            -- Статус для цвета (остается)
+            CASE
+                WHEN b.workshop_status = 'semifinished' 
+                     OR b.electrical_status = 'semifinished' 
+                     OR b.setup_status = 'semifinished'
+                THEN 'semifinished'
+                ELSE 'in_progress'
+            END as status
+            
+        FROM boards b
+        LEFT JOIN suppliers s ON b.supplier_id = s.id
+        LEFT JOIN bpla bp ON b.bpla_id = bp.id
+
+        -- ИСПРАВЛЕНА ЛОГИКА WHERE (ищем все, что НЕ готово)
+        WHERE NOT (
+            b.workshop_status = 'finished' 
+            AND b.electrical_status = 'finished' 
+            AND b.setup_status = 'finished'
+        )
+    `;
+    
+    const params = [];
+
+    if (number) { 
+        params.push(`%${number.trim().toLowerCase()}%`);
+        query += ` AND LOWER(TRIM(b.number)) ILIKE $${params.length}`; 
+    }
+    if (supplier_id) { 
+        params.push(supplier_id);
+        query += ` AND b.supplier_id = $${params.length}`; 
+    }
+    if (bpla_id) { 
+        params.push(bpla_id);
+        query += ` AND b.bpla_id = $${params.length}`;
+    }
+    
+    query += ' ORDER BY b.creation_date ASC';
+
+    try {
+        const { rows } = await pool.query(query, params);
+        res.json(rows);
+    } catch (err) {
+        console.error('Ошибка фильтрации трекера бортов:', err);
+        res.status(500).json({ error: 'Ошибка фильтрации' });
+    }
+});
+
+app.post('/api/summary/export', async (req, res) => {
+    // Получаем те же фильтры, что и для трекера
+    const { number, supplier_id, bpla_id } = req.body;
+    
+    try {
+        const workbook = new excel.Workbook();
+        workbook.creator = 'CARS App';
+        workbook.created = new Date();
+
+        // --- Лист 1: Статистика ---
+        const statsSheet = workbook.addWorksheet('Статистика');
+        
+        // Запрос 1: Получаем данные для статистики (такой же, как в GET /api/summary/statistics)
+        const statsQuery = `
+            WITH board_data AS (
+                SELECT
+                    b.supplier_id,
+                    CASE
+                        WHEN b.workshop_status = 'finished' AND b.electrical_status = 'finished' AND b.setup_status = 'finished'
+                        THEN TRUE ELSE FALSE
+                    END as is_fully_finished,
+                    CASE
+                        WHEN b.workshop_status = 'semifinished' OR b.electrical_status = 'semifinished' OR b.setup_status = 'semifinished'
+                        THEN TRUE ELSE FALSE
+                    END as is_semifinished,
+                    b.finished_date
+                FROM boards b
+            )
+            SELECT 
+                COALESCE(s.name, 'Не указан') as supplier_name,
+                COUNT(*) FILTER (WHERE bd.is_fully_finished = TRUE AND bd.finished_date = CURRENT_DATE) as today_finished,
+                COUNT(*) FILTER (WHERE bd.is_fully_finished = TRUE) as total_finished,
+                COUNT(*) FILTER (WHERE bd.is_fully_finished = FALSE AND bd.is_semifinished = FALSE) as total_in_progress,
+                COUNT(*) FILTER (WHERE bd.is_semifinished = TRUE) as total_semifinished
+            FROM board_data bd
+            LEFT JOIN suppliers s ON bd.supplier_id = s.id
+            GROUP BY s.name
+            ORDER BY supplier_name;
+        `;
+        const statsRes = await pool.query(statsQuery);
+        
+        // Заголовки таблицы статистики
+        statsSheet.columns = [
+            { header: 'Поставщик', key: 'supplier_name', width: 25 },
+            { header: 'Готово (Сегодня)', key: 'today_finished', width: 20 },
+            { header: 'Готово (Всего)', key: 'total_finished', width: 20 },
+            { header: 'В работе', key: 'total_in_progress', width: 15 },
+            { header: 'Полуфабрикаты (ПФ)', key: 'total_semifinished', width: 20 }
+        ];
+
+        // Добавляем данные
+        statsRes.rows.forEach(row => statsSheet.addRow(row));
+
+        // Считаем и добавляем ИТОГО
+        const totals = statsRes.rows.reduce((acc, row) => {
+            acc.today_finished += parseInt(row.today_finished, 10);
+            acc.total_finished += parseInt(row.total_finished, 10);
+            acc.total_in_progress += parseInt(row.total_in_progress, 10);
+            acc.total_semifinished += parseInt(row.total_semifinished, 10);
+            return acc;
+        }, { today_finished: 0, total_finished: 0, total_in_progress: 0, total_semifinished: 0 });
+
+        statsSheet.addRow({}); // Пустая строка
+        const totalRow = statsSheet.addRow({
+            supplier_name: 'ИТОГО',
+            today_finished: totals.today_finished,
+            total_finished: totals.total_finished,
+            total_in_progress: totals.total_in_progress,
+            total_semifinished: totals.total_semifinished
+        });
+        
+        // --- Лист 2: Трекер бортов ---
+        const trackerSheet = workbook.addWorksheet('Трекер бортов (в работе)');
+        
+        // Запрос 2: Получаем данные для трекера (такой же, как в POST /api/summary/board-tracker)
+        let trackerQuery = `
+            SELECT 
+                b.number,
+                bp.name as bpla_name,
+                s.name as supplier_name,
+                b.creation_date,
+                CASE
+                    WHEN b.workshop_status = 'semifinished' THEN 'Полуфабрикат (Слесарный цех)'
+                    WHEN b.electrical_status = 'semifinished' THEN 'Полуфабрикат (Электромонтаж)'
+                    WHEN b.setup_status = 'semifinished' THEN 'Полуфабрикат (Отдел Настройки)'
+                    WHEN b.workshop_status != 'finished' THEN 'В работе (Слесарный цех)'
+                    WHEN b.electrical_status != 'finished' THEN 'В работе (Электромонтаж)'
+                    WHEN b.setup_status != 'finished' THEN 'В работе (Отдел Настройки)'
+                    ELSE 'Ошибка статуса'
+                END as location,
+                CASE
+                    WHEN b.workshop_status = 'semifinished' OR b.electrical_status = 'semifinished' OR b.setup_status = 'semifinished'
+                    THEN 'semifinished'
+                    ELSE 'in_progress'
+                END as status
+            FROM boards b
+            LEFT JOIN suppliers s ON b.supplier_id = s.id
+            LEFT JOIN bpla bp ON b.bpla_id = bp.id
+            WHERE NOT (b.workshop_status = 'finished' AND b.electrical_status = 'finished' AND b.setup_status = 'finished')
+        `;
+        
+        const params = [];
+        if (number) { 
+            params.push(`%${number.trim().toLowerCase()}%`);
+            trackerQuery += ` AND LOWER(TRIM(b.number)) ILIKE $${params.length}`; 
+        }
+        if (supplier_id) { 
+            params.push(supplier_id);
+            trackerQuery += ` AND b.supplier_id = $${params.length}`; 
+        }
+        if (bpla_id) { 
+            params.push(bpla_id);
+            trackerQuery += ` AND b.bpla_id = $${params.length}`;
+        }
+        trackerQuery += ' ORDER BY b.creation_date ASC';
+
+        const trackerRes = await pool.query(trackerQuery, params);
+        
+        // Заголовки таблицы трекера
+        trackerSheet.columns = [
+            { header: 'Номер', key: 'number', width: 15 },
+            { header: 'Тип БПЛА', key: 'bpla_name', width: 25 },
+            { header: 'Поставщик', key: 'supplier_name', width: 25 },
+            { header: 'Дата поступления', key: 'creation_date', width: 20 },
+            { header: 'Текущее местоположение', key: 'location', width: 35 }
+        ];
+
+        // Добавляем данные и красим строки
+        trackerRes.rows.forEach(row => {
+            const addedRow = trackerSheet.addRow(row);
+            // Форматируем дату
+            addedRow.getCell('creation_date').value = new Date(row.creation_date).toLocaleDateString('ru-RU');
+            
+            // Красим строку в зависимости от статуса
+            if (row.status === 'semifinished') {
+                addedRow.fill = { type: 'pattern', pattern:'solid', fgColor:{argb:'FFFFE0E0'} }; // Светло-красный
+            } else {
+                addedRow.fill = { type: 'pattern', pattern:'solid', fgColor:{argb:'FFFEF5E7'} }; // Светло-оранжевый
+            }
+        });
+
+        // --- Стилизация и отправка ---
+        [statsSheet, trackerSheet].forEach(sheet => {
+            // Стилизация заголовка
+            sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            sheet.getRow(1).fill = { type: 'pattern', pattern:'solid', fgColor:{argb:'FF2C3E50'} };
+            sheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+            sheet.views = [{state: 'frozen', ySplit: 1}]; // Закрепить заголовок
+        });
+
+        // Стилизация ИТОГО
+        totalRow.font = { bold: true, size: 13 };
+        totalRow.fill = { type: 'pattern', pattern:'solid', fgColor:{argb:'FFF7F9FA'} };
+
+        // Отправка файла клиенту
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', `attachment; filename="summary_export_${new Date().toLocaleDateString('sv-SE')}.xlsx"`);
+        await workbook.xlsx.write(res);
+        res.end();
+
+    } catch (err) {
+        console.error('Ошибка при экспорте сводки в Excel:', err);
+        res.status(500).json({ error: 'Ошибка сервера при создании Excel-файла' });
+    }
 });
 
 // GET /api/logs - Получение списка логов

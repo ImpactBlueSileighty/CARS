@@ -667,3 +667,90 @@ input:checked + .slider:before {
 .slider.round:before {
     border-radius: 50%;
 }
+
+
+/* summary */
+
+.summary-card {
+    background: var(--white);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    box-shadow: var(--shadow);
+}
+.summary-card h2 {
+    margin-top: 0;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--primary);
+}
+
+/* Стили для таблицы статистики */
+#statsTable {
+    text-align: right;
+}
+#statsTable th {
+    text-align: right;
+}
+#statsTable th:first-child,
+#statsTable td:first-child {
+    text-align: left;
+    font-weight: 600;
+}
+.stat-today {
+    color: var(--accent-dark);
+    font-weight: 700;
+    font-size: 1.1em;
+}
+.stat-total {
+    font-weight: 700;
+    font-size: 1.1em;
+}
+.stat-progress {
+    color: #e67e22; /* Оранжевый */
+}
+.stat-semifinished {
+    color: var(--danger);
+}
+.summary-total-row {
+    font-weight: 700;
+    font-size: 1.1em;
+    border-top: 2px solid var(--primary);
+    background-color: #f7f9fa;
+}
+
+/* Стили для фильтров трекера */
+.summary-filter {
+    padding: 1rem;
+    background-color: #f7f9fa;
+    border-radius: 6px;
+    margin-bottom: 1.5rem;
+    
+    /* Убираем рамку от .filter-form */
+    margin-top: 0;
+    justify-content: flex-start;
+}
+.summary-filter .primary-filters {
+    flex: 1;
+}
+
+/* Стили для таблицы трекера */
+#trackerTable td.location-cell {
+    font-weight: 600;
+    color: var(--primary);
+}
+#trackerTable tr.is-semifinished {
+    background-color: #ffe0e0; /* Красный фон для ПФ */
+}
+#trackerTable tr.is-in-progress {
+    background-color: #fef5e7; /* Оранжевый фон для "В работе" */
+}
+#trackerTable td .error {
+    color: var(--danger);
+    text-align: center;
+}
+
+.summary-filter .filter-actions {
+    margin-left: auto; /* Прижимает кнопку к правому краю */
+    align-self: flex-end; /* Выравнивает по низу с селекторами */
+}

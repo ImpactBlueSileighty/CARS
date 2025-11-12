@@ -2,215 +2,79 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8" />
-    <title>ЦАРС - Сводка</title>
-    <link rel="stylesheet" href="/style/main.css" />
+    <title>ЦАРС | Сводка</title>
+    <link rel="stylesheet" href="style/main.css" />
 </head>
 <body>
+    <div id="sidebar-placeholder"></div>
 
-<div id="sidebar-placeholder"></div>
+    <main class="content">
+        <h1>Сводка по производству</h1>
 
-<main class="content">
+        <div class="summary-card">
+            <h2>Статистика по поставщикам</h2>
+            <div class="table-container">
+                <table id="statsTable">
+                    <thead>
+                        <tr>
+                            <th>Поставщик</th>
+                            <th>Готово (Сегодня)</th>
+                            <th>Готово (Всего)</th>
+                            <th>В работе</th>
+                            <th>Полуфабрикаты (ПФ)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="statsTableBody">
+                        </tbody>
+                    <tfoot id="statsTableFoot">
+                        </tfoot>
+                </table>
+            </div>
+        </div>
 
-    <h1>Общая сводка по бортам <span id="summaryTitleDate"></span></h1>
-    <div id="summaryStatisticsContainer" class="summary-stats-grid"></div>
-
-    <details class="filter-box">
-        <summary>🔍 Фильтр и поиск</summary>
-        <form id="filterForm" class="filter-form">
-            <div class="filter-controls">
+        <div class="summary-card">
+            <h2>Трекер бортов (в работе)</h2>
+            
+            <form id="filterForm" class="filter-form summary-filter">
                 <div class="primary-filters">
-                    <label>Номер борта: <input type="text" id="numberFilter" placeholder="Введите номер..." /></label>
-                    <label>Поставщик: <select id="supplierFilter"><option value="">Все</option></select></label>
-                    <label>Тип БПЛА: <select id="bplaFilter"><option value="">Все</option></select></label>
-                    <label>Статус:
-                        <select id="statusFilter">
-                            <option value="">Любой</option>
-                            <option value="finished">Готовые (зеленые)</option>
-                            <option value="overdue">Просрочено (красные)</option>
-                            <option value="today">В работе (оранжевые)</option>
+                    <label>Номер борта:
+                        <input type="text" id="numberFilter" placeholder="Поиск по номеру..." />
+                    </label>
+                    <label>Поставщик:
+                        <select id="supplierFilter">
+                            <option value="">Все поставщики</option>
+                        </select>
+                    </label>
+                    <label>Тип БПЛА:
+                        <select id="bplaFilter">
+                            <option value="">Все типы</option>
                         </select>
                     </label>
                 </div>
-            </div>
-            <div class="filter-actions">
-                <button type="button" id="resetFilterBtn">Сбросить</button>
-                <button type="submit">Применить</button>
-            </div>
-        </form>
-    </details>
-
-     <div class="table-container">
-        <table>
-            <thead>
-                <tr>
-                    <th>Номер</th> <th>Тип</th> <th>Поставщик</th>
-                    <th>Слесарный цех</th> <th>Отдел настройки</th>
-                    <th>Дата создания</th> <th>Дата готовности</th>
-                </tr>
-            </thead>
-            <tbody id="summaryTableBody"></tbody>
-        </table>
-    </div>
-    <div id="avatar-picker-container"></div>
-</main>
-
-<script src="/js/main.js"></script>
-<script>
-
-async function setSummaryTitleDate() {
-    const dateElement = document.getElementById('summaryTitleDate');
-    if (dateElement) {
-        const today = new Date();
-        const options = { year: 'numeric', month: 'long', day: 'numeric' };
-        dateElement.textContent = `за ${today.toLocaleDateString('ru-RU', options)}`;
-    }
-}
-document.addEventListener("DOMContentLoaded", () => {
-    const tableBody = document.getElementById('summaryTableBody');
-    const statsContainer = document.getElementById('summaryStatisticsContainer');
-
-    // --- НОВЫЕ ФУНКЦИИ для загрузки списков в фильтры ---
-    const loadSuppliers = async () => {
-        const select = document.getElementById('supplierFilter');
-        try {
-            const res = await fetch('/api/suppliers');
-            const suppliers = await res.json();
-            suppliers.forEach(s => {
-                const option = document.createElement('option');
-                option.value = s.id;
-                option.textContent = s.name;
-                select.appendChild(option);
-            });
-        } catch(e) { console.error("Ошибка загрузки поставщиков"); }
-    };
-
-    const loadBplaTypes = async () => {
-        const select = document.getElementById('bplaFilter');
-        try {
-            const res = await fetch('/api/bpla');
-            const bplaTypes = await res.json();
-            bplaTypes.forEach(type => {
-                const option = document.createElement('option');
-                option.value = type.id;
-                option.textContent = type.name;
-                select.appendChild(option);
-            });
-        } catch(e) { console.error("Ошибка загрузки типов БПЛА"); }
-    };
-
-    const getFilters = () => ({
-        number: document.getElementById('numberFilter').value.trim(),
-        supplier_id: document.getElementById('supplierFilter').value || null,
-        bpla_id: document.getElementById('bplaFilter').value || null,
-        status: document.getElementById('statusFilter').value,
-    });
-
-    const renderStats = (stats) => {
-        if (!statsContainer) return;
-        statsContainer.innerHTML = '';
-        stats.forEach(stat => {
-            const card = document.createElement('div');
-            card.className = 'stat-card';
-
-            // Формируем строку для счетчика "за сегодня", только если он больше нуля
-            const todayCountHtml = stat.green_today > 0 
-                ? `<span class="stat-today">(+${stat.green_today})</span>` 
-                : '';
-
-            card.innerHTML = `
-                <div class="stat-card-title">${stat.bpla_name || 'Не указан'}</div>
-                <div class="stat-card-body">
-                    <div class="stat-card-row">
-                        <span class="stat-label green">Готовые</span>
-                        <span class="stat-value">${stat.green} ${todayCountHtml}</span>
-                    </div>
-                    <div class="stat-card-row"><span class="stat-label red">Полуфабрикаты</span> <span class="stat-value">${stat.red}</span></div>
-                    <div class="stat-card-row"><span class="stat-label orange">В работе (сегодня)</span> <span class="stat-value">${stat.orange}</span></div>
+                <div class="filter-actions">
+                    <button type="button" id="exportBtn" class="btn-secondary">📄 Экспорт в Excel</button>
                 </div>
-            `;
-            statsContainer.appendChild(card);
-        });
-    };
+            </form>
 
-    const renderTable = (boards) => {
-        tableBody.innerHTML = '';
-        if (!boards || boards.length === 0) {
-            tableBody.innerHTML = `<tr><td colspan="7" style="text-align: center;">Нет данных</td></tr>`;
-            return;
-        }
-        const formatDate = date => date ? new Date(date).toLocaleDateString('ru-RU') : '—';
-        boards.forEach(board => {
-            const tr = document.createElement('tr');
+            <div class="table-container">
+                <table id="trackerTable">
+                    <thead>
+                        <tr>
+                            <th>Номер</th>
+                            <th>Тип БПЛА</th>
+                            <th>Поставщик</th>
+                            <th>Дата поступления</th>
+                            <th>Текущий статус</th>
+                        </tr>
+                    </thead>
+                    <tbody id="trackerTableBody">
+                        </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
 
-            // --- УПРОЩЕННАЯ ЛОГИКА ПОДСВЕТКИ ---
-            // Просто используем статус, который прислал сервер
-            if (board.status_color === 'green') {
-                tr.className = 'row-finished';
-            } else if (board.status_color === 'orange') {
-                tr.className = 'row-in-progress-today';
-            } else if (board.status_color === 'red') {
-                tr.className = 'row-in-progress-overdue';
-            }
-
-            tr.innerHTML = `
-                <td>${board.number}</td>
-                <td>${board.bpla_name || 'N/A'}</td>
-                <td>${board.supplier_name || 'N/A'}</td>
-                <td>${board.workshop_complete ? '✅' : '❌'}</td>
-                <td>${board.setup_complete ? '✅' : '❌'}</td>
-                <td>${formatDate(board.creation_date)}</td>
-                <td>${formatDate(board.finished_date)}</td>
-            `;
-            tableBody.appendChild(tr);
-        });
-    };
-
-    const loadSummaryData = async (filters = {}) => {
-        try {
-            const [statsRes, boardsRes] = await Promise.all([
-                fetch('/api/summary/statistics'),
-                fetch('/api/summary/filter', { 
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(filters)
-                })
-            ]);
-
-            if (!statsRes.ok || !boardsRes.ok) {
-                // Попытаемся получить текст ошибки с сервера
-                const errorText = await (statsRes.ok ? boardsRes : statsRes).text();
-                throw new Error(`Ошибка ответа сервера: ${errorText}`);
-            }
-
-            renderStats(await statsRes.json());
-            renderTable(await boardsRes.json());
-        } catch (error) {
-            console.error('Ошибка загрузки сводки:', error);
-            if(statsContainer) statsContainer.innerHTML = '<p>Ошибка загрузки статистики.</p>';
-            if(tableBody) tableBody.innerHTML = `<tr><td colspan="7" style="text-align: center;">Ошибка загрузки таблицы.</td></tr>`;
-        }
-    };
-    
-    document.getElementById('filterForm').addEventListener('submit', (e) => {
-        e.preventDefault();
-        loadSummaryData(getFilters());
-    });
-
-    document.getElementById('resetFilterBtn').addEventListener('click', () => {
-        document.getElementById('filterForm').reset();
-        loadSummaryData();
-    });
-
-    const initPage = async () => {
-        await loadSuppliers();
-        await loadBplaTypes();
-        await loadSummaryData();
-        await setSummaryTitleDate();
-    };
-
-    initPage();
-});
-</script>
-<script src="/js/include.js"></script>
+    <script src="/js/include.js"></script>
+    <script src="js/summary.js"></script>
 </body>
 </html>
